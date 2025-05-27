@@ -32,11 +32,14 @@ services:
     ports:
       - "8080:8080"   # gateway
       - "8761:8761"   # Eureka UI/API
+      - "9001:9001"   # Actuator Management Port
     depends_on:
       - rabbitmq
     environment:
-      SERVER_PORT: 8761
       SPRING_APPLICATION_NAME: master
+      SERVER_PORT: 8761
+      MANAGEMENT_PORT: 9001
+      EUREKA_INSTANCE_HOSTNAME: master
       EUREKA_REGISTER_WITH_EUREKA: "false"
       EUREKA_FETCH_REGISTRY: "false"
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -54,13 +57,47 @@ services:
       - master
       - rabbitmq
       - redis
+    ports:
+      - "9003:9003"   # Actuator Management Port
     environment:
-      SERVER_PORT: 0
       SPRING_APPLICATION_NAME: reconstructor
+      SERVER_PORT: 0
+      MANAGEMENT_PORT: 9003
       EUREKA_SERVICE_URL_DEFAULTZONE: http://master:8761/eureka
       EUREKA_CLIENT_REGISTER: "true"
       EUREKA_CLIENT_FETCH: "true"
+      SPRING_RABBIT_HOST: rabbitmq
+      SPRING_RABBIT_PORT: 5672
+      SPRING_RABBIT_USERNAME: user
+      SPRING_RABBIT_PASSWORD: password
       GCS_BUCKET_NAME: bucket-imagenes-sobel
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: password
+
+  splitter:
+    build:
+      context: ./splitter
+      dockerfile: Dockerfile
+    image: dagyss/splitter:latest
+    container_name: splitter
+    depends_on:
+      - master
+      - rabbitmq
+      - redis
+    ports:
+      - "9002:9002"   # Actuator Management Port
+    environment:
+      SPRING_APPLICATION_NAME: splitter
+      SERVER_PORT: 0
+      MANAGEMENT_PORT: 9002
+      EUREKA_SERVICE_URL_DEFAULTZONE: http://master:8761/eureka
+      EUREKA_CLIENT_REGISTER: "true"
+      EUREKA_CLIENT_FETCH: "true"
+      SPRING_RABBIT_HOST: rabbitmq
+      SPRING_RABBIT_PORT: 5672
+      SPRING_RABBIT_USERNAME: user
+      SPRING_RABBIT_PASSWORD: password
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_REDIS_PASSWORD: password
