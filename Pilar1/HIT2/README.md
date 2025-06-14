@@ -16,8 +16,8 @@ Consideración: Corto y conciso.
 
 - Sistema Operativo del Host: Windows 11
 - GPU Utilizada: Nvidia GTX 1660 Super
-- Controladores de Nvidia: Version ...
-- Version de CUDA: ....
+- Controladores de Nvidia: 576.57 
+- Version de CUDA: 12.9
 - Compilador de CUDA: nvcc
 
 
@@ -25,6 +25,11 @@ Consideración: Corto y conciso.
 
 |  #  | Problema                                                          | Solución                                                                                                                                  |
 | :-: | :---------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-|  1  | | |
-|  2  | | |
-|  3  | | |
+|  1  |	nvcc fatal : Cannot find compiler 'cl.exe' in PATH — nvcc no encontraba el compilador de MSVC porque no estaba en la variable PATH. |Instalar las Build Tools de Visual Studio con el workload “Desarrollo de escritorio con C++” y lanzar VS Code desde el x64 Native Tools Command Prompt. |
+
+## Comando de ejecución
+
+```bash
+nvcc hola-mundo.cu -o hola-mundo.exe
+hola-mundo.exe
+```
