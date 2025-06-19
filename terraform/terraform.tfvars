@@ -7,7 +7,7 @@ credentials_file = "terraform-sa-key.json"
 
 # Backend
 bucket_backend   = "bucket-backend-blockchain"
-backend_prefix   = "terraform/terraform.tfstate"
+backend_prefix   = "terraform/tfstate"
 
 # VPC / Subnet donde corre el cluster y las VMs
 network    = "vpc-blockchain-network"
