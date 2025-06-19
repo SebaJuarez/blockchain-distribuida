@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodo-coordinador
+  namespace: apps
+  labels:
+    app: nodo-coordinador
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nodo-coordinador
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nodo-coordinador
+    spec:
+      containers:
+        - name: nodo-coordinador
+          image: #llenar
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: coordinador-secrets
+
