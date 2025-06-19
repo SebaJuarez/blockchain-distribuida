@@ -31,6 +31,7 @@ services:
 
   # Servicio del Nodo Coordinador de Blockchain
   coordinator-node:
+    image: coordinator-node:latest
     build: ./coordinator-node
     depends_on: 
       rabbitmq:

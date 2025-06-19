@@ -27,4 +27,4 @@ export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
 export MINER_ID="${MINER_ID:-miner-python-001}"
 
 # 5) Ejecutar el miner
-python -m minero.minero
+python -m minero
