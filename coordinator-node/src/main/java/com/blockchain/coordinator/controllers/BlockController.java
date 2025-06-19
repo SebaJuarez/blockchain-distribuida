@@ -1,6 +1,7 @@
 package com.blockchain.coordinator.controllers;
 
 import com.blockchain.coordinator.dtos.MiningResult;
+import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.services.BlockService;
 import org.springframework.hateoas.EntityModel;
@@ -31,9 +32,9 @@ public class BlockController {
     }
 
     @GetMapping("/status")
-    public ResponseEntity<EntityModel<String>> getStatus() {
+    public ResponseEntity<EntityModel<StatusResponse>> getStatus() {
         String statusMessage = "El coordinador está en ejecución ...";
-        EntityModel<String> statusModel = EntityModel.of(statusMessage,
+        EntityModel<StatusResponse> statusModel = EntityModel.of(new StatusResponse(statusMessage),
                 linkTo(methodOn(BlockController.class).getStatus()).withSelfRel());
         return ResponseEntity.ok(statusModel);
     }
@@ -48,6 +49,7 @@ public class BlockController {
         EntityModel<Block> blockModel = EntityModel.of(latestBlock,
                 linkTo(methodOn(BlockController.class).getLatestBlock()).withSelfRel(),
                 linkTo(methodOn(BlockController.class).getBlockByHash(latestBlock.getHash())).withRel("self-by-hash"),
+                linkTo(methodOn(BlockController.class).getBlockByHash(latestBlock.getPrevious_hash())).withRel("previous-block"),
                 linkTo(methodOn(BlockController.class).getAllBlocks()).withRel("all-blocks"));
         return ResponseEntity.ok(blockModel);
     }
@@ -63,6 +65,7 @@ public class BlockController {
         Block block = blockOptional.get();
         EntityModel<Block> blockModel = EntityModel.of(block,
                 linkTo(methodOn(BlockController.class).getBlockByHash(blockHash)).withSelfRel(),
+                linkTo(methodOn(BlockController.class).getBlockByHash(block.getPrevious_hash())).withRel("previous-block"),
                 linkTo(methodOn(BlockController.class).getLatestBlock()).withRel("latest-block"),
                 linkTo(methodOn(BlockController.class).getAllBlocks()).withRel("all-blocks"));
         return ResponseEntity.ok(blockModel);
@@ -94,5 +97,4 @@ public class BlockController {
             return ResponseEntity.badRequest().body("Falló la validación o ya fue resuelto.");
         }
     }
-
 }
