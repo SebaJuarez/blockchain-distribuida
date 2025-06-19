@@ -13,7 +13,7 @@ public class MiningTaskPublisher {
 
     private final AmqpTemplate rabbitTemplate;
     private final MessageConverter jsonMessageConverter; // Para crear el cuerpo del mensaje JSON
-
+    private MiningTask task;
     public MiningTaskPublisher(AmqpTemplate rabbitTemplate, MessageConverter jsonMessageConverter) {
         this.rabbitTemplate = rabbitTemplate;
         this.jsonMessageConverter = jsonMessageConverter;
@@ -26,9 +26,10 @@ public class MiningTaskPublisher {
             return;
         }
 
-        MiningTask task = new MiningTask();
+        task = new MiningTask();
         task.setChallenge(hashChallenge);
         task.setBlock(blockCandidate);
+        task.setRetries(0);
 
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryMode(MessageProperties.DEFAULT_DELIVERY_MODE.PERSISTENT);
@@ -41,5 +42,16 @@ public class MiningTaskPublisher {
         System.out.println("Se publico la tarea de mineria para el bloque con index: " + blockCandidate.getIndex() +
                 " ( hash ID: " + blockCandidate.getHash() + ") a RabbitMQ.");
     }
+
+    public MiningTask getCurrentTask() {
+        return task;
+    }
+
+    public void incrementRetries() {
+        if (task != null) {
+            task.setRetries(task.getRetries() + 1);
+        }
+    }
+
 }
 
