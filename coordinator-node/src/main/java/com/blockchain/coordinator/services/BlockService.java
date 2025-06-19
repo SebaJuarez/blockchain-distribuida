@@ -54,6 +54,8 @@ public class BlockService {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        this.objectMapper.configure(SerializationFeature.INDENT_OUTPUT, false);
     }
 
     // carga el ultimo bloque o crea el genesis
@@ -132,7 +134,8 @@ public class BlockService {
         blocksInProgress.put(preliminaryHash, newBlock); // Almacenar el candidato para futura verificación
 
         System.out.println("Se creo el bloque candidato con el id (hash): " + preliminaryHash +
-                " para el bloque previo: " + previousHash + " (Index: " + newBlockIndex + ")");
+                " para el bloque previo: " + previousHash + " (Index: " + newBlockIndex + ")" +
+        " --- ALMACENADO EN blocksInProgress con clave: " + preliminaryHash);
         return newBlock;
     }
 
@@ -148,7 +151,7 @@ public class BlockService {
                 String.valueOf(block.getTimestamp()) +
                 dataAsString +
                 block.getPrevious_hash();
-
+        System.out.println("Se calculo el hash del contenido del bloque: " + contentInput);
         return applyMd5(contentInput);
     }
 
@@ -163,31 +166,29 @@ public class BlockService {
     public boolean verifyMiningSolution(String blockId, long nonce, String solvedBlockHash) {
         Block blockCandidate = blocksInProgress.get(blockId);
         if (blockCandidate == null) {
-            System.out.println("No se encontro el bloque candidato con el di: " + blockId + ". Pude que fue resuelto o expiro.");
+            System.out.println("No se encontró el bloque candidato con id: " + blockId + ". Puede que haya expirado o ya se procesó.");
             return false;
         }
 
-        // bloque para calcular el hash con el nonce propuesto sin modificar el original.
-        Block tempBlock = new Block(
-                blockCandidate.getIndex(),
-                blockCandidate.getPrevious_hash(),
-                blockCandidate.getData(),
-                blockCandidate.getTimestamp(),
-                nonce,
-                solvedBlockHash
-        );
+        // Reutilizamos blockId, que es MD5(contenido), para calcular:
+        // finalHash = MD5(nonce + blockId)
+        blockCandidate.setNonce(nonce);
+        String calculatedHash = calculateFinalBlockHash(blockCandidate);
 
-        String calculatedHash = calculateFinalBlockHash(tempBlock); // se calcula el hash final con el nonce
-
-        boolean hashMatches = calculatedHash.equals(solvedBlockHash);
-        // Comprueba si el hash comienza con el prefijo de dificultad (hashChallenge)
+        boolean hashMatches   = calculatedHash.equals(solvedBlockHash);
         boolean difficultyMet = solvedBlockHash.startsWith(hashChallenge);
 
         if (!hashMatches) {
-            System.out.println("Fallo la verificacion del bloque:  " + blockId + ": El hash no concuerda. Se calculo: " + calculatedHash + ", Se entrego: " + solvedBlockHash);
+            System.out.printf(
+                    "Fallo la verificación del bloque %s: hash calculado=%s, hash entregado=%s%n",
+                    blockId, calculatedHash, solvedBlockHash
+            );
         }
         if (!difficultyMet) {
-            System.out.println("Fallo la verificacion del bloque:  " + blockId + ": La dificultad no concuerda. Hash entregado: " + solvedBlockHash + ", Dificultad esperada: " + hashChallenge);
+            System.out.printf(
+                    "Fallo la dificultad para el bloque %s: hash entregado=%s, prefijo requerido=%s%n",
+                    blockId, solvedBlockHash, hashChallenge
+            );
         }
 
         return hashMatches && difficultyMet;

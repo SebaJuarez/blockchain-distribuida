@@ -1,10 +1,12 @@
 package com.blockchain.coordinator.dtos;
 
+import com.blockchain.coordinator.models.Transaction;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -14,6 +16,8 @@ public class MiningResult implements Serializable {
     private String previous_hash;
     private long nonce;
     private long timestamp;
-    private Object data; // Object para obtener el JSON de las transacciones
+    private List<Transaction> data;
     private int index;
+    private String blockId; // El ID de la tarea original (el hash preliminar del bloque candidato)
+    private String minerId; // El ID del minero que encontró la solución
 }

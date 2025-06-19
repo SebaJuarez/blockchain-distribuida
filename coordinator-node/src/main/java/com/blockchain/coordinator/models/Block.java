@@ -23,7 +23,6 @@ public class Block implements Serializable {
     private List<Transaction> data;
     private int index;
 
-    // Constructor para la creación inicial de un bloque candidato (antes de ser minado).
     public Block(int index, String previous_hash, List<Transaction> data, long timestamp, long nonce, String hash) {
         this.index = index;
         this.previous_hash = previous_hash;
@@ -33,12 +32,11 @@ public class Block implements Serializable {
         this.hash = hash;
     }
 
-    // Constructor simplificado para crear un bloque candidato con valores por defecto
     public Block(int index, String previous_hash, List<Transaction> data) {
         this.index = index;
         this.previous_hash = previous_hash;
         this.data = data;
-        this.timestamp = LocalDateTime.now().toEpochSecond(java.time.ZoneOffset.UTC); // Timestamp de creación del candidato
+        this.timestamp = LocalDateTime.now().toEpochSecond(java.time.ZoneOffset.UTC);
         this.nonce = 0;
         this.hash = "";
     }

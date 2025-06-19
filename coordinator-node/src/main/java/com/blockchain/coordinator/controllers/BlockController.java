@@ -2,11 +2,9 @@ package com.blockchain.coordinator.controllers;
 
 import com.blockchain.coordinator.dtos.MiningResult;
 import com.blockchain.coordinator.models.Block;
-import com.blockchain.coordinator.models.Transaction;
 import com.blockchain.coordinator.services.BlockService;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.CollectionModel;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -84,25 +82,17 @@ public class BlockController {
     }
 
     @PostMapping("/result")
-    public ResponseEntity<?> validateBlock(@RequestBody MiningResult miningResult) {
-
-        Optional<Block> addedBlock = blockService.addMinedBlock(
-                miningResult.getData() instanceof String ? miningResult.getData().toString() : blockService.calculateBlockContentHash(new Block(miningResult.getIndex(), miningResult.getPrevious_hash(), (List<Transaction>) miningResult.getData(), miningResult.getTimestamp(), miningResult.getNonce(), miningResult.getHash())),
-                miningResult.getNonce(),
-                miningResult.getHash()
+    public ResponseEntity<?> validateBlock(@RequestBody MiningResult candidateBlock) {
+        Optional<Block> added = blockService.addMinedBlock(
+                candidateBlock.getBlockId(),
+                candidateBlock.getNonce(),
+                candidateBlock.getHash()
         );
-
-        if (addedBlock.isPresent()) {
-            return ResponseEntity.ok(
-                    EntityModel.of("Block " + addedBlock.get().getIndex() + " Creado y añadido.",
-                            linkTo(methodOn(BlockController.class).getBlockByHash(addedBlock.get().getHash())).withRel("view-block"),
-                            linkTo(methodOn(BlockController.class).getLatestBlock()).withRel("latest-block"))
-            );
+        if (added.isPresent()) {
+            return ResponseEntity.ok("Bloque añadido correctamente.");
         } else {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                    EntityModel.of("Falló la validación, el bloque puede ser invalido o ya fue resuelto por otro minero.",
-                            linkTo(methodOn(BlockController.class).getStatus()).withRel("status-check"))
-            );
+            return ResponseEntity.badRequest().body("Falló la validación o ya fue resuelto.");
         }
     }
+
 }
