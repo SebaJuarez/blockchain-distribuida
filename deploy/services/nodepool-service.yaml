@@ -4,7 +4,8 @@ metadata:
   name: node-pool
   namespace: apps
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  loadBalancerIP: ##IP
   selector:
     app: node-pool
   ports:

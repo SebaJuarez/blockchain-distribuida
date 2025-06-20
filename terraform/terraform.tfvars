@@ -15,6 +15,6 @@ subnetwork = "subnetwork-blockchain"
 
 infra_node_tag = "gke-infra-pool"
 
-# Escala de workers Sobel en VMs
-worker_min_nodes = 1
+
+worker_min_nodes = 0
 worker_max_nodes = 5
