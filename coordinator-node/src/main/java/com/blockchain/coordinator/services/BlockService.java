@@ -258,6 +258,14 @@ public class BlockService {
         return latestBlock;
     }
 
+    public boolean hasBlocksInProgress() {
+        return !blocksInProgress.isEmpty();
+    }
+
+    public void clearBlocksInProgress() {
+        blocksInProgress.clear();
+    }
+
     private String applyMd5(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("MD5");

@@ -15,4 +15,5 @@ public class MiningTask implements Serializable {
     private ExchangeEvent event;
     private String challenge;
     private Block block;
+    private Integer retries;
 }

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class MiningTaskPublisher {
 
     private final AmqpTemplate rabbitTemplate;
+    private MiningTask task;
     private final MessageConverter jsonMessageConverter;
     private final AmqpAdmin amqpAdmin;
 
@@ -32,9 +33,10 @@ public class MiningTaskPublisher {
             return;
         }
 
-        MiningTask task = new MiningTask();
+        task = new MiningTask();
         task.setChallenge(hashChallenge);
         task.setBlock(blockCandidate);
+        task.setRetries(0);
         task.setEvent(ExchangeEvent.NEW_CANDIDATE_BLOCK);
 
         MessageProperties properties = new MessageProperties();
@@ -52,6 +54,16 @@ public class MiningTaskPublisher {
                 "Se publicó la tarea de minería para el bloque con index: " + blockCandidate.getIndex() +
                         " (hash ID: " + blockCandidate.getHash() + ") al exchange '" + RabbitMQConfig.BLOCKCHAIN_EXCHANGE + "'."
         );
+    }
+  
+    public MiningTask getCurrentTask() {
+        return task;
+    }
+
+    public void incrementRetries() {
+        if (task != null) {
+            task.setRetries(task.getRetries() + 1);
+        }
     }
 
     public void notifySolvedCandidateBlock(Block solvedBlock, String preliminaryHash, String minerId) {
