@@ -1,7 +1,7 @@
 package com.blockchain.coordinator.services;
 
 import com.blockchain.coordinator.config.RabbitMQConfig;
-import com.blockchain.coordinator.dtos.MiningSolvedStatus;
+import com.blockchain.coordinator.dtos.MiningTaskStatus;
 import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.ExchangeEvent;
@@ -79,7 +79,7 @@ public class MiningTaskPublisher {
             System.err.println("Error al eliminar el bloque candidato: " + e.getMessage());
         }
 
-        MiningSolvedStatus solvedTask = new MiningSolvedStatus(
+        MiningTaskStatus solvedTask = new MiningTaskStatus(
                 ExchangeEvent.RESOLVED_CANDIDATE_BLOCK,
                 preliminaryHash,
                 minerId
@@ -91,5 +91,22 @@ public class MiningTaskPublisher {
         Message message = jsonMessageConverter.toMessage(solvedTask, properties);
         rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
         System.out.println("Se notificó que el bloque: " + preliminaryHash + "  fue resuelto. Evento RESOLVED_CANDIDATE_BLOCK publicado.");
+    }
+
+    public void notifyMiningTaskDropped(String preliminaryHash)
+    {
+        MiningTaskStatus solvedTask = new MiningTaskStatus(
+                ExchangeEvent.CANDIDATE_BLOCK_DROPPED,
+                preliminaryHash,
+                ""
+        );
+
+        MessageProperties properties = new MessageProperties();
+        properties.setDeliveryMode(MessageProperties.DEFAULT_DELIVERY_MODE.PERSISTENT);
+
+        Message message = jsonMessageConverter.toMessage(solvedTask, properties);
+        rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
+
+        System.out.println("Se notificó que el bloque: " + preliminaryHash + "  fue dropeado. Evento CANDIDATE_BLOCK_DROPPED publicado.");
     }
 }

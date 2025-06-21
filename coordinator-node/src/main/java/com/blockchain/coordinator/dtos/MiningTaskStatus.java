@@ -6,7 +6,7 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public class MiningSolvedStatus {
+public class MiningTaskStatus {
     private ExchangeEvent event;
     private String preliminaryHashBlockResolved;
     private String minerId;

@@ -1,68 +1,73 @@
 package com.blockchain.coordinator.scheduler;
 
+import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.models.Block;
+import com.blockchain.coordinator.models.ExchangeEvent;
 import com.blockchain.coordinator.services.BlockService;
-import com.blockchain.coordinator.services.MiningTaskPublisher;
+import com.blockchain.coordinator.services.CurrentMiningTaskService;
+import com.blockchain.coordinator.services.DifficultyService;
+import com.blockchain.coordinator.services.MiningTaskNotifier;
+import com.blockchain.coordinator.services.QueueAdminService;
 import com.blockchain.coordinator.services.TransactionPoolService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component("blockchainTaskScheduler")
+@RequiredArgsConstructor
 public class TaskScheduler {
 
     private final BlockService blockService;
-    private final MiningTaskPublisher miningTaskPublisher;
+    private final MiningTaskNotifier miningTaskNotifier;
+    private final CurrentMiningTaskService currentMiningTaskService;
+    private final QueueAdminService queueAdminService;
     private final TransactionPoolService transactionPoolService;
+    private final DifficultyService difficultyService;
 
-    @Value("${blockchain.mining.transactions-per-block}")
-    private int transactionsPerBlock;
     @Value("${blockchain.mining.max-transactions-per-block}")
     private int maxTransactionsPerBlock;
-    @Value("${blockchain.mining.hash-challenge}")
-    private String hashChallenge;
-
-    public TaskScheduler(BlockService blockService, MiningTaskPublisher miningTaskPublisher, TransactionPoolService transactionPoolService) {
-        this.blockService = blockService;
-        this.miningTaskPublisher = miningTaskPublisher;
-        this.transactionPoolService = transactionPoolService;
-    }
+    @Value("${blockchain.mining.min-transactions-per-block}")
+    private int minTransactionsPerBlock;
+    @Value("${blockchain.mining.max-retries}")
+    private int maxRetries;
 
     @Scheduled(cron = "0 */1 * * * *")
     public void createAndPublishMiningTask() {
-        // 1) Si ya hay una tarea previa (task!=null):
-        MiningTask prev = miningTaskPublisher.getCurrentTask();
-        boolean inProgress = blockService.hasBlocksInProgress();
 
-        if (prev != null) {
-            if (prev.getRetries() >= 3) {
-                if (inProgress) {
-                    System.out.println("Se superaron 3 retries y siguen bloques en progreso. Descarto candidato anterior.");
-                    blockService.clearBlocksInProgress();
-                }
+        MiningTask prevTask = currentMiningTaskService.getCurrentTask();
+        boolean coordinatorHasActiveMiningTask = (prevTask != null);
+
+        if (coordinatorHasActiveMiningTask) {
+            if (prevTask.getRetries() >= maxRetries) {
+                System.out.println("Scheduler: Se superaron " + maxRetries + " reintentos para el bloque " + prevTask.getBlock().getHash() + ". Descartando candidato.");
+                difficultyService.decrementChallenge();
+                miningTaskNotifier.notifyMiningTaskDropped(prevTask.getBlock().getHash());
+                currentMiningTaskService.clearCurrentTask();
+                queueAdminService.purgeBlocksQueue();
             } else {
-                if (inProgress) {
-                    // tiro la misma tarea otra vez, sumando retry
-                    miningTaskPublisher.incrementRetries();
-                    System.out.println("Reintentando tarea de minería (retry " + prev.getRetries() + ")");
-                    return;
-                }
+                currentMiningTaskService.incrementCurrentTaskRetries();
+                System.out.println("Scheduler: Tarea de minería (" + prevTask.getBlock().getHash() + ") persistente, reintentos: " + prevTask.getRetries() + ".");
+                return;
             }
         }
 
-        // Si hay transacciones suficientes, creo candidato nuevo
         int pending = transactionPoolService.getPendingTransactionCount();
-        if (pending >= transactionsPerBlock) {
-            System.out.println("Scheduler: creando nuevo bloque candidato (tarea de mineria)");
+
+        if (pending >= minTransactionsPerBlock) {
+            System.out.println("Scheduler: No hay tarea activa o la anterior fue descartada. Creando y publicando nuevo bloque candidato (tarea de minería).");
             Block newBlock = blockService.createNewMiningCandidateBlock(maxTransactionsPerBlock);
             if (newBlock != null) {
-                miningTaskPublisher.publishMiningTask(newBlock, hashChallenge);
+                String challengeForNewTask = difficultyService.getCurrentChallenge();
+                MiningTask newTask = new MiningTask(ExchangeEvent.NEW_CANDIDATE_BLOCK, challengeForNewTask, newBlock, 0);
+                currentMiningTaskService.saveCurrentTask(newTask);
+                miningTaskNotifier.notifyNewMiningTask(newBlock, challengeForNewTask, 0);
             } else {
-                System.out.println("Scheduler: No hay transacciones suficientes para crear el bloque candidato).");
+                System.out.println("Scheduler: No hay transacciones suficientes para crear el bloque candidato.");
             }
         } else {
             System.out.println("Scheduler: No hay transacciones suficientes para crear el bloque candidato. Actualmente: "
-                + pending + ". Requerido: " + transactionsPerBlock);
+                    + pending + ". Requerido: " + minTransactionsPerBlock);
         }
     }
 }

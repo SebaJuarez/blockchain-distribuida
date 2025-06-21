@@ -8,13 +8,14 @@ import org.springframework.data.redis.core.RedisHash;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @RedisHash("Block")
-public class Block implements Serializable {
+public class Block implements Serializable, Cloneable {
     @Id
     private String hash;
     private String previous_hash;
@@ -39,5 +40,16 @@ public class Block implements Serializable {
         this.timestamp = LocalDateTime.now().toEpochSecond(java.time.ZoneOffset.UTC);
         this.nonce = 0;
         this.hash = "";
+    }
+
+    @Override
+    public Block clone() throws CloneNotSupportedException {
+        Block clonedBlock = (Block) super.clone();
+        if (this.data != null) {
+            clonedBlock.data = new ArrayList<>(this.data);
+        } else {
+            clonedBlock.data = null;
+        }
+        return clonedBlock;
     }
 }

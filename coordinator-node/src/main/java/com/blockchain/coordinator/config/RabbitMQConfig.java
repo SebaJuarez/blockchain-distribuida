@@ -22,7 +22,7 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue blocksQueue() {
-        return new Queue(BLOCKS_QUEUE, true); // durable = true
+        return new Queue(BLOCKS_QUEUE, true);
     }
 
     @Bean
