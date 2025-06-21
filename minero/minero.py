@@ -1,172 +1,196 @@
-# miner.py
-import ast
 import json
 import os
 import subprocess
-import sys  # <--- ¡IMPORTANTE: Añadido!
+import sys
 import threading
 import time
-import re  # Para parsear la salida del ejecutable CUDA
+import re
 
 import requests
+import pika
 from pika import exceptions as rabbitmq_exceptions
 
-# Asumiendo que estos están en las rutas relativas o en PYTHONPATH
 from plugins.rabbitmq import rabbit_connect
 from model.block import Block
 from utils.check_gpu import check_for_nvidia_smi
-# from utils.find_nonce import find_nonce_with_prefix  # Descomentar si usas CPU fallback
 
-# --- Variables de Entorno y Configuración ---
-# Puedes usar un .env o directamente en Docker Compose/línea de comandos
-BLOCKS_COORDINATOR_URL = os.environ.get("BLOCKS_COORDINATOR_URL", "http://localhost:8080/api/blocks/result")
+# --- Configuración ---
+BLOCKS_COORDINATOR_URL = os.environ.get(
+    "BLOCKS_COORDINATOR_URL", "http://localhost:8080/api/blocks/result"
+)
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
-MINER_ID = os.environ.get("MINER_ID", "miner-python-001")  # ID único para este minero
+MINER_ID = os.environ.get("MINER_ID", "miner-python-001")
 
-# --- Rutas y Nombres de Archivos para CUDA ---
+EXCHANGE_NAME = "blockchain"
+EXCHANGE_TYPE = "fanout"
+
+# CUDA
 cuda_bin_dir = os.path.join(os.getcwd(), "utils", "cuda")
-
-# En Windows usamos .exe; en Linux/macOS no
-if sys.platform.startswith("win"):
-    cuda_exe_name = "md5_cuda.exe"
-else:
-    cuda_exe_name = "md5_cuda"
+cuda_exe_name = "md5_cuda.exe" if sys.platform.startswith("win") else "md5_cuda"
 CUDA_EXECUTABLE_PATH = os.path.join(cuda_bin_dir, cuda_exe_name)
 
-# --- Conexiones y Estado Global ---
-rabbitmq_connection = None  # Inicializamos a None, se establecerá en main
-
-# Verifica la disponibilidad de la GPU al inicio
+# Estado global
 gpu_available = check_for_nvidia_smi()
+stop_current_task = threading.Event()
 
-# --- Funciones de Utilidad ---
 
 def send_mining_result(block_solved, miner_id, block_id):
-    """
-    Envía el bloque resuelto al Coordinador via HTTP POST,
-    incluyendo el blockId (el hash de contenido original).
-    """
     try:
         payload = block_solved.to_dict()
         payload["blockId"] = block_id
         payload["minerId"] = miner_id
-        
-        print(f"[{miner_id}] Sending solved block to Coordinator: {payload['hash']}", file=sys.stdout, flush=True)
-        
-        response = requests.post(
-            BLOCKS_COORDINATOR_URL,
-            json=payload,
-            headers={"Content-Type": "application/json"}
-        )
-        response.raise_for_status()
-        print(f"[{miner_id}] Coordinator response: {response.status_code} - {response.text}", file=sys.stdout, flush=True)
 
-    except requests.exceptions.RequestException as e:
-        print(f"[{miner_id}] HTTP request error when sending result: {e}", file=sys.stderr, flush=True)
+        print(f"[{miner_id}] Enviando bloque candidato al coordinador : {payload['hash']}")
+        resp = requests.post(BLOCKS_COORDINATOR_URL, json=payload)
+        resp.raise_for_status()
+        print(f"[{miner_id}] Coordinator response: {resp.status_code} - {resp.text}")
     except Exception as e:
-        print(f"[{miner_id}] Unexpected error when sending result: {e}", file=sys.stderr, flush=True)
+        print(f"[{miner_id}] Error enviando el resultado: {e}", file=sys.stderr)
 
 
-def consume_tasks():
-    global rabbitmq_connection
-    print(" [*] Waiting for mining tasks. To exit press CTRL+C")
+def mine_block(challenge, block, from_range, to_range):
+    """
+    Minado interrumpible. Devuelve (nonce, hash, preliminary_hash) o (None, None, preliminary_hash).
+    """
+    preliminary_hash = block.hash
+    block_content_hash = block.get_block_content_hash()
 
+    found_nonce = None
+    solved_hash = None
+
+    if gpu_available:
+        if not os.path.exists(CUDA_EXECUTABLE_PATH):
+            print(f"[{MINER_ID}] CUDA ejecutable no encontrado.", file=sys.stderr)
+            return None, None, preliminary_hash
+
+        proc = subprocess.Popen(
+            [CUDA_EXECUTABLE_PATH, challenge, block_content_hash, str(from_range), str(to_range)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        while proc.poll() is None:
+            if stop_current_task.is_set():
+                proc.terminate()
+                print(f"[{MINER_ID}] ABORTANDO por evento: RESOLVED_CANDIDATE_BLOCK.")
+                return None, None, preliminary_hash
+            time.sleep(0.5)
+
+        out, _ = proc.communicate()
+        m1 = re.search(r"Nonce encontrado: (\d+)", out)
+        m2 = re.search(r"Hash resultante: ([0-9a-fA-F]+)", out)
+        if m1 and m2:
+            found_nonce = int(m1.group(1))
+            solved_hash = m2.group(1)
+
+    else:
+        from utils.find_nonce import find_nonce_with_prefix
+        for n in range(from_range, to_range):
+            if stop_current_task.is_set():
+                print(f"[{MINER_ID}] ABORTANDO por evento: RESOLVED_CANDIDATE_BLOCK.")
+                return None, None, preliminary_hash
+            h = find_nonce_with_prefix(challenge, block_content_hash, n, n + 1)
+            if h:
+                found_nonce, solved_hash = n, h
+                break
+
+    return found_nonce, solved_hash, preliminary_hash
+
+
+def fanout_listener():
+    """
+    Hilo que escucha el exchange fanout y marca stop_current_task
+    sólo si otro minero resolvió el bloque.
+    """
+    conn = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+    ch = conn.channel()
+    ch.exchange_declare(exchange=EXCHANGE_NAME, exchange_type=EXCHANGE_TYPE, durable=True)
+    q = ch.queue_declare(queue="", exclusive=True).method.queue
+    ch.queue_bind(exchange=EXCHANGE_NAME, queue=q)
+
+    def on_event(_, __, ___, body):
+        try:
+            msg = json.loads(body)
+            if msg.get("event") == "RESOLVED_CANDIDATE_BLOCK":
+                by = msg.get("minerId")
+                hb = msg.get("preliminaryHashBlockResolved")
+                if by and by != MINER_ID:
+                    print(f"[{MINER_ID}] Se detecto que fue resuelto por: {by} (hash={hb}), abortando tarea de mineria.")
+                    stop_current_task.set()
+                else:
+                    print(f"[{MINER_ID}] Auto-resuelto ({by}), ignorando evento..")
+        except Exception as e:
+            print(f"[{MINER_ID}] Error fanout_listener: {e}", file=sys.stderr)
+
+    print(f"[{MINER_ID}] Listening fanout '{EXCHANGE_NAME}'…")
+    ch.basic_consume(queue=q, on_message_callback=on_event, auto_ack=True)
+    ch.start_consuming()
+
+
+def mining_task_consumer():
+    """
+    Hilo principal de consumo de la cola 'blocks'. Reintenta si el canal se cierra.
+    """
     while True:
         try:
-            if rabbitmq_connection is None or rabbitmq_connection.is_closed:
-                print("[*] Attempting to connect to RabbitMQ...", file=sys.stdout, flush=True)
-                rabbitmq_connection = rabbit_connect(host=RABBITMQ_HOST)
-                channel = rabbitmq_connection.channel()
-                channel.queue_declare(queue="blocks", durable=True)
-                channel.basic_consume(queue="blocks", on_message_callback=callback)
-                print("[*] Connected to RabbitMQ. Starting consuming...", file=sys.stdout, flush=True)
-                channel.start_consuming()
-        except rabbitmq_exceptions.AMQPConnectionError as e:
-            print(f"RabbitMQ connection error: {e}. Retrying in 5 seconds...", file=sys.stderr, flush=True)
-            rabbitmq_connection = None
-            time.sleep(5)
+            conn = rabbit_connect(RABBITMQ_HOST)
+            ch = conn.channel()
+            ch.queue_declare(queue="blocks", durable=True)
+
+            def on_task(inner_ch, method, props, body):
+                stop_current_task.clear()
+                preliminary = None
+                try:
+                    task = json.loads(body)
+                    if task.get("event") != "NEW_CANDIDATE_BLOCK":
+                        return  # lo clean-ackeamos abajo
+
+                    challenge = task["challenge"]
+                    blk = Block.from_task_payload(task["block"])
+                    frm = task.get("from", 0)
+                    to = task.get("to", 100_000_000_000)
+
+                    print(f"[{MINER_ID}] NUEVA tarea idx={blk.index} range={frm}-{to}")
+                    nonce, fh, preliminary = mine_block(challenge, blk, frm, to)
+
+                    if nonce is not None:
+                        blk.nonce = nonce
+                        blk.hash = fh
+                        send_mining_result(blk, MINER_ID, preliminary)
+                    else:
+                        print(f"[{MINER_ID}] No se encontro solución o fue abortada.")
+
+                except Exception as e:
+                    print(f"[{MINER_ID}] Error en on_task: {e}", file=sys.stderr)
+
+                finally:
+                    # siempre ack-eamos, para no reprocesar
+                    try:
+                        inner_ch.basic_ack(method.delivery_tag)
+                    except Exception as ack_e:
+                        print(f"[{MINER_ID}] Ack failed (ignored): {ack_e}", file=sys.stderr)
+
+            ch.basic_consume(queue="blocks", on_message_callback=on_task)
+            print(f"[{MINER_ID}] Esperando tareas en la cola 'Blocks'..")
+            ch.start_consuming()
+
         except rabbitmq_exceptions.ChannelClosedByBroker as e:
-            print(f"RabbitMQ channel closed by broker: {e}. Retrying in 5 seconds...", file=sys.stderr, flush=True)
-            rabbitmq_connection = None
-            time.sleep(5)
+            print(f"[{MINER_ID}] ChannelClosedByBroker, reconectando... {e}", file=sys.stderr)
+            time.sleep(1)
         except Exception as e:
-            print(f"An unexpected error occurred in consume_tasks: {e}. Retrying...", file=sys.stderr, flush=True)
-            rabbitmq_connection = None
-            time.sleep(5)
-
-
-def callback(ch, method, properties, body):
-    try:
-        task = json.loads(body)
-        challenge = task["challenge"]
-        block_data_from_task = task["block"]
-
-        # agregar lógica de ajustar el rango de búsqueda según dificultad
-
-        from_range = task.get("from", 0)
-        to_range = task.get("to", 100000000000)
-
-        print(f"[{MINER_ID}] Received mining task for block index: {block_data_from_task['index']}", file=sys.stdout, flush=True)
-        print(f"[{MINER_ID}] Challenge: '{challenge}', Range: [{from_range}, {to_range}]", file=sys.stdout, flush=True)
-
-        block = Block.from_task_payload(block_data_from_task)
-        preliminary_hash = block.hash
-        block_content_hash = block.get_block_content_hash()
-
-        print(f"[{MINER_ID}] Task's preliminary hash (block_content_hash): {block_content_hash}", file=sys.stdout, flush=True)
-
-        solved_block_hash = ""
-        found_nonce = 0
-
-        if gpu_available:
-            if not os.path.exists(CUDA_EXECUTABLE_PATH):
-                print(f"[{MINER_ID}] Error: CUDA executable not found at {CUDA_EXECUTABLE_PATH}.", file=sys.stderr, flush=True)
-                ch.basic_ack(method.delivery_tag)
-                return
-
-            process = subprocess.run(
-                [CUDA_EXECUTABLE_PATH, challenge, block_content_hash, str(from_range), str(to_range)],
-                capture_output=True,
-                text=True
-            )
-
-            nonce_match = re.search(r"Nonce encontrado: (\d+)", process.stdout)
-            hash_match = re.search(r"Hash resultante: ([0-9a-fA-F]+)", process.stdout)
-
-            if nonce_match and hash_match:
-                found_nonce = int(nonce_match.group(1))
-                solved_block_hash = hash_match.group(1)
-                print(f"[{MINER_ID}] Nonce found: {found_nonce}, Hash: {solved_block_hash}", file=sys.stdout, flush=True)
-
-        else:
-            from utils.find_nonce import find_nonce_with_prefix
-            found_nonce, solved_block_hash = find_nonce_with_prefix(challenge, block_content_hash, from_range, to_range)
-
-        if found_nonce and solved_block_hash:
-            block.hash = solved_block_hash
-            block.nonce = found_nonce
-            send_mining_result(block, MINER_ID, preliminary_hash)
-        else:
-            print(f"[{MINER_ID}] No nonce found for block {block.index}.", file=sys.stdout, flush=True)
-
-        ch.basic_ack(method.delivery_tag)
-
-    except Exception as e:
-        print(f"[{MINER_ID}] Error in callback: {e}", file=sys.stderr, flush=True)
-        ch.basic_ack(method.delivery_tag)
+            print(f"[{MINER_ID}] Error inesperado en el consumidor: {e}", file=sys.stderr)
+            time.sleep(2)
 
 
 if __name__ == "__main__":
-    print(f"[{MINER_ID}] Starting GPU/CPU PoW miner...", file=sys.stdout, flush=True)
-    consumer_thread = threading.Thread(target=consume_tasks)
-    consumer_thread.daemon = True
-    consumer_thread.start()
+    print(f"[{MINER_ID}] Minero prendiendo..")
+
+    threading.Thread(target=fanout_listener, daemon=True).start()
+    threading.Thread(target=mining_task_consumer, daemon=True).start()
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print(f"[{MINER_ID}] Miner stopped by user.", file=sys.stdout, flush=True)
-        if rabbitmq_connection and not rabbitmq_connection.is_closed:
-            rabbitmq_connection.close()
+        print(f"[{MINER_ID}] Minero apagando..")
         sys.exit(0)
