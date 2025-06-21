@@ -1,19 +1,16 @@
 package com.blockchain.miningpool.dtos;
 
 import com.blockchain.miningpool.models.Block;
-import com.blockchain.miningpool.models.ExchangeEvent;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class MiningTask implements Serializable {
-    private ExchangeEvent event;
-    private String challenge;
+public class SubTask {
     private Block block;
-    private Integer retries;
+    private String challenge;
+    private long from;
+    private long to;
 }
