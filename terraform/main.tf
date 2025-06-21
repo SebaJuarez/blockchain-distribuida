@@ -240,26 +240,23 @@ resource "google_compute_instance_template" "python_miner" {
   }
 }
 
-resource "google_compute_region_instance_group_manager" "python_miners" {
+resource "google_compute_instance_group_manager" "python_miners" {
   name               = "python-miners-mig"
-  region             = var.region
-  version {
-    instance_template = google_compute_instance_template.python_miner.self_link
-  }
+  zone               = var.zone                  
+  instance_template  = google_compute_instance_template.python_miner.self_link
   base_instance_name = "python-miner"
-  target_size        = var.worker_min_nodes  
+  target_size        = var.worker_min_nodes
 }
 
-resource "google_compute_region_autoscaler" "python_miners_autoscaler" {
+resource "google_compute_autoscaler" "python_miners_autoscaler" {
   name   = "python-miners-autoscaler"
-  region = var.region
-
-  target = google_compute_region_instance_group_manager.python_miners.id
+  zone   = var.zone                         
+  target = google_compute_instance_group_manager.python_miners.id
 
   autoscaling_policy {
-    min_replicas        = var.worker_min_nodes
-    max_replicas        = var.worker_max_nodes
-    cooldown_period_sec = 30
+    min_replicas     = var.worker_min_nodes     # 0
+    max_replicas     = var.worker_max_nodes     # 5
+    cooldown_period  = 30                       
 
     cpu_utilization {
       target = 0.6
@@ -268,8 +265,6 @@ resource "google_compute_region_autoscaler" "python_miners_autoscaler" {
     custom_metric_utilization {
       metric             = "custom.googleapis.com/gpu_alive_miners_count"
       utilization_target = 1.0
-      # opcionalmente podés filtrar si tenés labels:
-      # filter = "resource.label.pool=\"main-pool\""
     }
   }
 }
