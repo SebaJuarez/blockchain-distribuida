@@ -203,7 +203,7 @@ resource "google_container_node_pool" "apps" {
 # Sobel Worker VMs
 resource "google_service_account" "python_miner" {
   project    = var.project_id
-  account_id = "python_miner-sa"
+  account_id = "python-miner-sa"
 }
 
 resource "google_project_iam_member" "python_miner_metrics_writer" {
