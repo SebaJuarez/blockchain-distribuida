@@ -243,7 +243,9 @@ resource "google_compute_instance_template" "python_miner" {
 resource "google_compute_instance_group_manager" "python_miners" {
   name               = "python-miners-mig"
   zone               = var.zone                  
-  instance_template  = google_compute_instance_template.python_miner.self_link
+  version {
+    instance_template = google_compute_instance_template.python_miner.self_link
+  }
   base_instance_name = "python-miner"
   target_size        = var.worker_min_nodes
 }
