@@ -255,19 +255,23 @@ resource "google_compute_region_autoscaler" "python_miners_autoscaler" {
   region = var.region
 
   target = google_compute_region_instance_group_manager.python_miners.id
+
   autoscaling_policy {
-    min_replicas = var.worker_min_nodes
-    max_replicas = var.worker_max_nodes
+    min_replicas        = var.worker_min_nodes
+    max_replicas        = var.worker_max_nodes
+    cooldown_period_sec = 30
+
     cpu_utilization {
       target = 0.6
     }
-  }
-  custom_metric_utilization {
-      # el nombre completo en Monitoring de tu métrica
-      metric = "custom.googleapis.com/gpu_alive_miners_count"  
-      # compara: si metric_value > utilization_target → scale out
-      utilization_target = 1
+
+    custom_metric_utilization {
+      metric             = "custom.googleapis.com/gpu_alive_miners_count"
+      utilization_target = 1.0
+      # opcionalmente podés filtrar si tenés labels:
+      # filter = "resource.label.pool=\"main-pool\""
     }
+  }
 }
 
 resource "google_service_account_iam_member" "allow_k8s_to_impersonate" {
