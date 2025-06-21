@@ -1,9 +1,11 @@
 package com.blockchain.coordinator.controllers;
 
 import com.blockchain.coordinator.dtos.MiningResult;
+import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.services.BlockService;
+import com.blockchain.coordinator.services.MiningTaskPublisher;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +28,11 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 public class BlockController {
 
     private final BlockService blockService;
+    private final MiningTaskPublisher miningTaskPublisher;
 
-    public BlockController(BlockService blockService) {
+    public BlockController(BlockService blockService, MiningTaskPublisher miningTaskPublisher) {
         this.blockService = blockService;
+        this.miningTaskPublisher = miningTaskPublisher;
     }
 
     @GetMapping("/status")
@@ -86,12 +90,14 @@ public class BlockController {
 
     @PostMapping("/result")
     public ResponseEntity<?> validateBlock(@RequestBody MiningResult candidateBlock) {
+        System.out.println("SE RECIBIO EL BLOQUE: " + candidateBlock.getBlockId());
         Optional<Block> added = blockService.addMinedBlock(
                 candidateBlock.getBlockId(),
                 candidateBlock.getNonce(),
                 candidateBlock.getHash()
         );
         if (added.isPresent()) {
+            miningTaskPublisher.notifySolvedCandidateBlock(added.get(), candidateBlock.getBlockId(), candidateBlock.getMinerId());
             return ResponseEntity.ok("Bloque añadido correctamente.");
         } else {
             return ResponseEntity.badRequest().body("Falló la validación o ya fue resuelto.");
