@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: node-pool
-          image: #llenar
+          image: sebajuarez/minerpool:12345
           ports:
             - containerPort: 6060
           envFrom:

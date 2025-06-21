@@ -4,3 +4,4 @@
 !/terraform/terraform.tfvars
 
 /deploy/secrets
+!/deploy/secrets/*.example

@@ -1,4 +1,4 @@
-name: Docker-Image Pipeline
+name: Docker-Image-Coordinador Pipeline
 
 on:
   #push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: ##falta sebajuarezz/coordinador
+  IMAGE_NAME: sebajuarez/coordinador
 
 
 jobs:

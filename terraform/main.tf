@@ -88,10 +88,6 @@ variable "worker_max_nodes" {
   default     = 5
 }
 
-variable "bucket_name" {
-  description = "Nombre del bucket de GCS para fragmentos de imagen"
-  type        = string
-}
 
 variable "network" {
   description = "VPC donde desplegar clúster y VMs"
@@ -151,6 +147,10 @@ resource "google_container_cluster" "primary" {
   subnetwork               = google_compute_subnetwork.subnet.name
   initial_node_count       = 1
 
+  workload_identity_config {
+    workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
   ip_allocation_policy {
     cluster_secondary_range_name  = "gke-cluster-secondary-range"
     services_secondary_range_name = "gke-services-secondary-range"
@@ -200,23 +200,24 @@ resource "google_container_node_pool" "apps" {
   }
 }
 
-resource "google_service_account" "reconstructor" {
-  project    = var.project_id
-  account_id   = "reconstructor-sa"
-}
-
 # Sobel Worker VMs
-resource "google_service_account" "sobel_worker" {
+resource "google_service_account" "python_miner" {
   project    = var.project_id
-  account_id = "sobel-worker-sa"
+  account_id = "python-miner-sa"
 }
 
-resource "google_compute_instance_template" "sobel_worker" {
-  name_prefix = "sobel-worker-"
-  tags        = ["sobel-worker"]
+resource "google_project_iam_member" "python_miner_metrics_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.python_miner.email}"
+}
+
+resource "google_compute_instance_template" "python_miner" {
+  name_prefix = "python-miner-"
+  tags        = ["python-miner"]
 
   service_account {
-    email  = google_service_account.sobel_worker.email
+    email  = google_service_account.python_miner.email
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
@@ -230,7 +231,7 @@ resource "google_compute_instance_template" "sobel_worker" {
 
   machine_type = var.machine_type
 
-  metadata_startup_script = file("${path.module}/startup-worker.sh")
+  metadata_startup_script = file("${path.module}/startup-miner.sh")
 
   network_interface {
     network    = google_compute_network.vpc.id
@@ -239,46 +240,42 @@ resource "google_compute_instance_template" "sobel_worker" {
   }
 }
 
-resource "google_compute_region_instance_group_manager" "sobel_workers" {
-  name               = "sobel-workers-rigm"
-  region             = var.region
-  base_instance_name = "sobel-worker"
+resource "google_compute_instance_group_manager" "python_miners" {
+  name               = "python-miners-mig"
+  zone               = var.zone                  
   version {
-    instance_template = google_compute_instance_template.sobel_worker.self_link
+    instance_template = google_compute_instance_template.python_miner.self_link
   }
-  target_size = var.worker_min_nodes
+  base_instance_name = "python-miner"
+  target_size        = var.worker_min_nodes
 }
 
-resource "google_compute_region_autoscaler" "sobel_workers_autoscaler" {
-  name   = "sobel-workers-autoscaler"
-  region = var.region
+resource "google_compute_autoscaler" "python_miners_autoscaler" {
+  name   = "python-miners-autoscaler"
+  zone   = var.zone                         
+  target = google_compute_instance_group_manager.python_miners.id
 
-  target = google_compute_region_instance_group_manager.sobel_workers.id
   autoscaling_policy {
-    min_replicas = var.worker_min_nodes
-    max_replicas = var.worker_max_nodes
+    min_replicas     = var.worker_min_nodes     # 0
+    max_replicas     = var.worker_max_nodes     # 5
+    cooldown_period  = 30                       
+
     cpu_utilization {
       target = 0.6
+    }
+
+    metric {
+      name   = "custom.googleapis.com/gpu_alive_miners_count"
+      target = 1.0
+      type   = "GAUGE" 
     }
   }
 }
 
-# Creación del bucket de GCS
-resource "google_storage_bucket" "mi_bucket" {
-  name                        = var.bucket_name
-  location                    = "US"
-  storage_class               = "STANDARD"
-  uniform_bucket_level_access = true
-  force_destroy               = true
-}
-
-resource "google_storage_bucket_iam_binding" "bucket_admins" {
-  bucket = google_storage_bucket.mi_bucket.name
-  role   = "roles/storage.objectAdmin"
-  members = [
-    "serviceAccount:${google_service_account.reconstructor.email}",
-    "serviceAccount:${google_service_account.sobel_worker.email}"
-  ]
+resource "google_service_account_iam_member" "allow_k8s_to_impersonate" {
+  service_account_id = google_service_account.python_miner.name  # tu python_miner-sa@
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[infra/blockchain-sa]"
 }
 
 # Reglas de Firewall
