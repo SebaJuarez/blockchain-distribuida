@@ -213,8 +213,8 @@ resource "google_project_iam_member" "python_miner_metrics_writer" {
 }
 
 resource "google_compute_instance_template" "python_miner" {
-  name_prefix = "python_miner-"
-  tags        = ["python_miner"]
+  name_prefix = "python-miner-"
+  tags        = ["python-miner"]
 
   service_account {
     email  = google_service_account.python_miner.email
