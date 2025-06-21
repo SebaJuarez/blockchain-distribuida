@@ -264,9 +264,10 @@ resource "google_compute_autoscaler" "python_miners_autoscaler" {
       target = 0.6
     }
 
-    custom_metric_utilization {
-      metric             = "custom.googleapis.com/gpu_alive_miners_count"
-      utilization_target = 1.0
+    metric {
+      name   = "custom.googleapis.com/gpu_alive_miners_count"
+      target = 1.0
+      type   = "GAUGE" 
     }
   }
 }
