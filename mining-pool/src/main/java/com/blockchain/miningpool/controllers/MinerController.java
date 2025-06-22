@@ -11,8 +11,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
-@RequestMapping("/api/miners")
+@RequestMapping("/api/pools")
 @RequiredArgsConstructor
 public class MinerController {
 
@@ -20,35 +22,35 @@ public class MinerController {
     private final MiningResultService miningResultService;
 
     @PostMapping("/register")
-    public ResponseEntity<EntityModel<RegisterResponse>> registerMiner(Miner miner) {
+    public ResponseEntity<EntityModel<RegisterResponse>> registerMiner(@RequestBody Miner miner) {
         if (!miner.isGpuMiner()) {
-            RegisterResponse response = new RegisterResponse(HttpStatus.BAD_REQUEST, "Miner is not a GPU miner");
+            RegisterResponse response = new RegisterResponse(HttpStatus.BAD_REQUEST, "Solo se aceptan mineros GPU'S");
             return ResponseEntity.badRequest().body(EntityModel.of(response));
         }
         minerService.addMiner(miner);
-        RegisterResponse response = new RegisterResponse(HttpStatus.OK, "Miner registered successfully");
+        RegisterResponse response = new RegisterResponse(HttpStatus.OK, "El minero se registro exitosamente");
         return ResponseEntity.ok(EntityModel.of(response));
     }
 
     @PostMapping("/keep-alive")
-    public ResponseEntity<EntityModel<RegisterResponse>> keepAlive(String minerId) {
-        if (!minerService.isMinerExists(minerId)) {
-            RegisterResponse response = new RegisterResponse(HttpStatus.BAD_REQUEST, "Miner not registered");
+    public ResponseEntity<EntityModel<RegisterResponse>> keepAlive(@RequestBody Map<String,String> minerPublicKey) {
+        if (!minerService.isMinerExists(minerPublicKey.get("minerPublicKey"))) {
+            RegisterResponse response = new RegisterResponse(HttpStatus.BAD_REQUEST, "El minero no estaba registrado");
             return ResponseEntity.badRequest().body(EntityModel.of(response));
         }
-        minerService.updateKeepAlive(minerId);
-        RegisterResponse response = new RegisterResponse(HttpStatus.OK, "Miner keep alive updated successfully");
+        minerService.updateKeepAlive(minerPublicKey.get("minerPublicKey"));
+        RegisterResponse response = new RegisterResponse(HttpStatus.OK, "Keep-alive actualizado correctamente");
         return ResponseEntity.ok().body(EntityModel.of(response));
     }
 
     @PostMapping("/{idMiner}/results")
     public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@PathVariable String idMiner, @RequestBody MiningResult miningResult) {
         if(!minerService.isMinerExists(idMiner)){
-            return ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.FORBIDDEN, "Miner not found")));
+            return ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no perteneciente al pool")));
         }
         boolean isResultValid  = miningResultService.isValidMiningResult(miningResult);
         return isResultValid ?
-                ResponseEntity.ok(EntityModel.of(new RegisterResponse(HttpStatus.OK, "Mining result enviado al coordinador.."))) :
+                ResponseEntity.ok(EntityModel.of(new RegisterResponse(HttpStatus.OK, "Resultado enviado al coordinador.."))) :
                 ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.BAD_REQUEST, "Mining result no era valido..")));
     }
 }

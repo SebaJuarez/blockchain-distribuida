@@ -5,18 +5,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
-
-import java.sql.Timestamp;
-import java.util.List;
+import java.time.Instant;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @RedisHash("Miner")
 public class Miner {
-
     @Id
     private String publicKey;
-    private Timestamp lastTimestamp;
+    private Instant lastTimestamp;
     private boolean isGpuMiner;
 }

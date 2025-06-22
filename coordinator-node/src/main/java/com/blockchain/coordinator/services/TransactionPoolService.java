@@ -58,8 +58,7 @@ public class TransactionPoolService {
             }
         }
     }
-
-
+    
     // Obtiene un número específico de transacciones pendientes del pool en memoria.
     // Las transacciones se eliminan del pool una vez que se obtienen, para ser incluidas en un bloque.
     public List<Transaction> getPendingTransactions(int count) {

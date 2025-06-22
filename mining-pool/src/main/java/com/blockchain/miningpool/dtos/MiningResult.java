@@ -1,6 +1,6 @@
 package com.blockchain.miningpool.dtos;
 
-import com.blockchain.coordinator.models.Transaction;
+import com.blockchain.miningpool.models.Transaction;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

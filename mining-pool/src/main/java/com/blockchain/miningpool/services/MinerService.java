@@ -2,14 +2,18 @@ package com.blockchain.miningpool.services;
 
 import com.blockchain.miningpool.models.Miner;
 
+import java.util.List;
+
+
 public interface MinerService {
-    void addMiner(Miner miner);
-    void updateKeepAlive(String minerId);
-    void checkKeepAliveMiners();
-    void deleteMiner(Miner miner);
-    void deleteAllMiners();
-    Miner getMiner(String publicKey);
+    boolean addMiner(Miner miner);
+
+    boolean updateKeepAlive(String minerId);
     boolean isMinerExists(String publicKey);
-    boolean isGpuMiner(String publicKey);
-    int getMinersCount();
+
+    void checkKeepAliveMiners(long keepAliveTimeout);
+
+    Long getMinersCount();
+
+    List<Miner> getMiners();
 }

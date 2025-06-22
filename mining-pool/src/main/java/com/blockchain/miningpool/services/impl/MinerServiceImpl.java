@@ -6,6 +6,10 @@ import com.blockchain.miningpool.services.MinerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class MinerServiceImpl implements MinerService {
@@ -13,47 +17,61 @@ public class MinerServiceImpl implements MinerService {
     private final MinersRepository minersRepository;
 
     @Override
-    public void addMiner(Miner miner) {
-
+    public boolean addMiner(Miner miner) {
+        if (!miner.isGpuMiner()) {
+            return false;
+        }
+        minersRepository.save(miner);
+        return true;
     }
 
     @Override
-    public void updateKeepAlive(String minerId) {
+    public boolean updateKeepAlive(String minerId) {
 
-    }
+        if (minerId == null || minerId.trim().isEmpty()) {
+            System.out.println("Id del minero es nulo.");
+            return false;
+        }
 
-    @Override
-    public void checkKeepAliveMiners() {
+        Optional<Miner> minerOptional = minersRepository.findById(minerId);
 
-    }
-
-    @Override
-    public void deleteMiner(Miner miner) {
-
-    }
-
-    @Override
-    public void deleteAllMiners() {
-
-    }
-
-    @Override
-    public Miner getMiner(String publicKey) {
-        return null;
+        if (minerOptional.isPresent()) {
+            Miner miner = minerOptional.get();
+            miner.setLastTimestamp(Instant.now());
+            minersRepository.save(miner);
+            System.out.println("MinerService: Minero " + miner.getPublicKey() + " Keep-alive actualizado.");
+            return true;
+        } else {
+            System.out.println("MinerService: Minero " + minerId + " no encontrado.");
+            return false;
+        }
     }
 
     @Override
     public boolean isMinerExists(String publicKey) {
-        return false;
+        return minersRepository.existsById(publicKey);
     }
 
     @Override
-    public boolean isGpuMiner(String publicKey) {
-        return false;
+    public void checkKeepAliveMiners(long keepAliveTimeout) {
+        Instant cutoff = Instant.now().minusMillis(keepAliveTimeout);
+
+        for (Miner miner : minersRepository.findAll()) {
+            if (miner.getLastTimestamp().isBefore(cutoff)) {
+                minersRepository.delete(miner);
+                System.out.println("Miner " + miner.getPublicKey() +
+                        " fue borrado tras " + keepAliveTimeout + "ms sin keep-alive");
+            }
+        }
     }
 
     @Override
-    public int getMinersCount() {
-        return 0;
+    public Long getMinersCount() {
+        return minersRepository.count();
+    }
+
+    @Override
+    public List<Miner> getMiners() {
+        return (List<Miner>) minersRepository.findAll();
     }
 }
