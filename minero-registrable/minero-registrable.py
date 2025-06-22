@@ -19,11 +19,11 @@ from plugins.rabbitmq import rabbit_connect
 POOL_BASE_URL   = os.environ.get("POOL_BASE_URL",   "http://localhost:8081/api/pool")
 REGISTER_URL    = f"{POOL_BASE_URL}/register"
 KEEP_ALIVE_URL  = f"{POOL_BASE_URL}/keep-alive"
-RESULTS_URL     = f"{POOL_BASE_URL}/result"
+
 
 MINER_ID        = os.environ.get("MINER_ID") or str(uuid.uuid4())
 MINER_PUBLIC_KEY= os.environ.get("PUBLIC_KEY")   or str(uuid.uuid4())
-
+RESULTS_URL     = f"{POOL_BASE_URL}/{MINER_PUBLIC_KEY}/results"
 # --- Configuración RabbitMQ ---
 RABBITMQ_HOST         = os.environ.get("RABBITMQ_HOST", "localhost")
 POOL_TASKS_QUEUE      = "pool_tasks"
@@ -64,6 +64,7 @@ def keep_alive_loop(interval=10):
             print(f"[{MINER_ID}] Keep-alive sent")
         except Exception as e:
             print(f"[{MINER_ID}] Keep-alive error: {e}", file=sys.stderr)
+            register_miner()
         time.sleep(interval)
 
 
@@ -103,16 +104,23 @@ def mine_range(challenge, block, start, end):
         out, _ = proc.communicate()
 
     else:
-        from utils.find_nonce import find_nonce_with_prefix
+        from utils.find_nonce import find_nonce
+        print(f"No hay gpu")
         out = ""
         for n in range(start, end):
             if stop_current_task.is_set():
                 print(f"[{MINER_ID}] Aborting PoW")
                 return None, None, preliminary_hash
-            h = find_nonce_with_prefix(challenge, content_hash, n, n+1)
-            if h:
-                out = f"Nonce encontrado: {n}\nHash resultante: {h}"
+            result = find_nonce(challenge, content_hash, n)
+            if result:
+                nonce, digest = result
+                out = f"Nonce encontrado: {nonce}\nHash resultante: {digest}"
+                print(out)
                 break
+        if not out:
+            print("No encontró nonce en el rango")
+        
+    
 
     m1 = re.search(r"Nonce encontrado: (\d+)", out)
     m2 = re.search(r"Hash resultante: ([0-9a-fA-F]+)", out)

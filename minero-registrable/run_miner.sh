@@ -26,4 +26,4 @@ export POOL_BASE_URL ="${POOL_BASE_URL:-http://localhost:8080/api/pools}"
 export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
 
 # 5) Ejecutar el miner
-python -m minero
+python -m minero-registrable
