@@ -19,7 +19,6 @@ class Block:
         """
         data_as_string = json.dumps(self.data, separators=(',', ':'), sort_keys=False)
         content_input = f"{self.index}{self.timestamp}{data_as_string}{self.previous_hash}"
-        print("CONTENIDO QUE SE VA A HASHEAR" + content_input)
         return hashlib.md5(content_input.encode('utf-8')).hexdigest()
 
     def calculate_final_block_hash(self):

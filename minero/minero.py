@@ -141,13 +141,18 @@ def fanout_listener():
 
 def mining_task_consumer():
     """
-    Consume la cola 'blocks'. Reconecta si el canal se cierra.
+    Se bindea al mismo FanoutExchange 'blockchain'
     """
     while True:
         try:
             conn = rabbit_connect(RABBITMQ_HOST)
             ch = conn.channel()
-            ch.queue_declare(queue="blocks", durable=True)
+
+            # Declara una cola efímera exclusiva y bindea al fanout 'blockchain'
+            result = ch.queue_declare(queue="", exclusive=True, durable=True)
+            my_queue = result.method.queue
+            ch.exchange_declare(exchange=EXCHANGE_NAME, exchange_type=EXCHANGE_TYPE, durable=True)
+            ch.queue_bind(exchange=EXCHANGE_NAME, queue=my_queue)
 
             def on_task(inner_ch, method, props, body):
                 stop_current_task.clear()
@@ -182,8 +187,8 @@ def mining_task_consumer():
                     except Exception as ack_e:
                         print(f"[{MINER_ID}] Ack ignored: {ack_e}", file=sys.stderr)
 
-            ch.basic_consume(queue="blocks", on_message_callback=on_task)
-            print(f"[{MINER_ID}] Esperando en 'blocks'…")
+            ch.basic_consume(queue=my_queue, on_message_callback=on_task)
+            print(f"[{MINER_ID}] Esperando NEW_CANDIDATE_BLOCK en '{my_queue}'…")
             ch.start_consuming()
 
         except rabbitmq_exceptions.ChannelClosedByBroker as e:
