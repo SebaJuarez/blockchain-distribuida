@@ -3,9 +3,9 @@ package com.blockchain.miningpool.services.impl;
 import com.blockchain.miningpool.dtos.MiningResult;
 import com.blockchain.miningpool.feingClients.CoordinatorClient;
 import com.blockchain.miningpool.services.MiningResultService;
+import feign.FeignException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,12 +25,11 @@ public class MiningResultServiceImpl implements MiningResultService {
                 miningResult.getBlockId().isEmpty() ||
                 miningResult.getMinerId().isEmpty())
             return false;
-
-        HttpStatusCode responseStatus = coordinatorClient.sendResult(miningResult);
-
-        if(responseStatus != HttpStatus.OK || responseStatus != HttpStatus.CREATED) {
+        try {
+            ResponseEntity<String> resp = coordinatorClient.sendResult(miningResult);
+            return resp.getStatusCode().is2xxSuccessful();
+        } catch (FeignException.BadRequest e) {
             return false;
         }
-        return true;
     }
 }

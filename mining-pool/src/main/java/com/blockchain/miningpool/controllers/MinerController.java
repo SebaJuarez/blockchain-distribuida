@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 import java.util.Map;
 
 @RestController
@@ -43,14 +44,16 @@ public class MinerController {
         return ResponseEntity.ok().body(EntityModel.of(response));
     }
 
-    @PostMapping("/{idMiner}/results")
-    public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@PathVariable String idMiner, @RequestBody MiningResult miningResult) {
-        if(!minerService.isMinerExists(idMiner)){
+    @PostMapping("/results")
+    public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@RequestBody MiningResult miningResult) {
+        System.out.println("Tarea del minero: " + miningResult.getMinerId() + " recibida para el bloque: " + miningResult.getBlockId());
+        if(!minerService.isMinerExists(miningResult.getMinerId())){
             return ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no perteneciente al pool")));
         }
         boolean isResultValid  = miningResultService.isValidMiningResult(miningResult);
+        System.out.println(isResultValid);
         return isResultValid ?
-                ResponseEntity.ok(EntityModel.of(new RegisterResponse(HttpStatus.OK, "Resultado enviado al coordinador.."))) :
-                ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.BAD_REQUEST, "Mining result no era valido..")));
+                ResponseEntity.ok(EntityModel.of(new RegisterResponse(HttpStatus.OK, "Resultado validado por el coordinador.."))) :
+                ResponseEntity.badRequest().body(EntityModel.of(new RegisterResponse(HttpStatus.BAD_REQUEST, "Resultado invalidado por el coordinador..")));
     }
 }

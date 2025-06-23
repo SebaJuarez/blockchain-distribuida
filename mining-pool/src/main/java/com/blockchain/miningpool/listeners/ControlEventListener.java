@@ -5,6 +5,7 @@ import com.blockchain.miningpool.dtos.MiningTask;
 import com.blockchain.miningpool.dtos.MiningTaskStatus;
 import com.blockchain.miningpool.models.ExchangeEvent;
 import com.blockchain.miningpool.services.MinerService;
+import com.blockchain.miningpool.services.QueueAdmin;
 import com.blockchain.miningpool.services.WorkerDispatcher;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class ControlEventListener {
     private final WorkerDispatcher dispatcher;
     private final MinerService minerService;
     private final RabbitTemplate rabbitTemplate;
+    private final QueueAdmin queueAdmin;
 
     @RabbitListener(
             queues = RabbitMQConfig.BLOCKS_CONTROL_QUEUE,
@@ -79,6 +81,7 @@ public class ControlEventListener {
                     (dropped.getEvent() == ExchangeEvent.CANDIDATE_BLOCK_DROPPED ||
                             dropped.getEvent() == ExchangeEvent.RESOLVED_CANDIDATE_BLOCK)) {
                 dispatcher.broadcastCancel(dropped.getPreliminaryHashBlockResolved());
+                queueAdmin.purgeSubTasksQueue();
             } else {
                 System.err.println("Tipo de payload inesperado: " + payload.getClass().getName());
             }
