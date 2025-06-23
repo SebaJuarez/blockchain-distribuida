@@ -32,7 +32,7 @@ public class TaskScheduler {
     @Value("${blockchain.mining.max-retries}")
     private int maxRetries;
 
-    @Scheduled(cron = "0 */1 * * * *")
+    @Scheduled(cron = "${blockchain.mining.task-publication-cron}")
     public void createAndPublishMiningTask() {
 
         MiningTask prevTask = currentMiningTaskService.getCurrentTask();
