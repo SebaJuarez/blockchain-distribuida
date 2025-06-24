@@ -1,9 +1,9 @@
 name: Docker-Image-Pool Pipeline
 
 on:
-  #push:
-  #  branches:
-  #    - main
+  workflow_run:
+    workflows: ["Docker-Image-Coordinador Pipeline"]
+    types: [completed]
   workflow_dispatch:
 
 env:
