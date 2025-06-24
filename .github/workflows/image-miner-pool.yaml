@@ -34,11 +34,11 @@ jobs:
         java-version: '21'
 
     - name: Build with Maven
-      working-directory: coordinator-node/
+      working-directory: mining-pool/
       run: mvn clean package -DskipTests
 
     - name: Build and Push Docker Image
-      working-directory: coordinator-node/
+      working-directory: mining-pool/
       run: |
         docker build \
             -t $IMAGE_NAME:${{ steps.vars.outputs.TAG }} .
