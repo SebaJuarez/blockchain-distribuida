@@ -9,7 +9,7 @@ spec:
   selector:
     app: node-pool
   ports:
-    - port: 6060
-      targetPort: 6060
+    - port: 8081
+      targetPort: 8081
       protocol: TCP
       name: http

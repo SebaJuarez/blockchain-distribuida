@@ -6,7 +6,7 @@ metadata:
   labels:
     app: node-pool
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: node-pool
@@ -21,11 +21,7 @@ spec:
         - name: node-pool
           image: sebajuarez/minerpool:be317d4
           ports:
-            - containerPort: 6060
-          env:
-            - name: RABBITMQ_HOST
-              value: "rabbitmq"  # nombre del servicio RabbitMQ
-            - name: REDIS_HOST
-              value: "redis"  # nombre del servicio Redis
-            - name: METADATA_COORDINATOR_URL
-              value: "nodo-coordinador:8080"
+            - containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: pool-secrets

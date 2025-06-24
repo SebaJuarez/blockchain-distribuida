@@ -6,7 +6,7 @@ metadata:
   labels:
     app: nodo-coordinador
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: nodo-coordinador
@@ -22,9 +22,6 @@ spec:
           image: sebajuarez/coordinador:08a62f7
           ports:
             - containerPort: 8080
-          env:
-            - name: RABBITMQ_HOST
-              value: "rabbitmq"  # nombre del servicio RabbitMQ
-            - name: REDIS_HOST
-              value: "redis"  # nombre del servicio Redis
-
+          envFrom:
+            - secretRef:
+                name: coordinador-secrets

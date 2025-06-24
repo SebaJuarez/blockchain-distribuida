@@ -9,3 +9,4 @@ spec:
     app: rabbitmq
   ports:
     - port: 5672
+  type: LoadBalancer

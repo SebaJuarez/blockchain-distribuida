@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-miner-metrics
+  namespace: infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-miner-metrics
+  template:
+    metadata:
+      labels:
+        app: gpu-miner-metrics
+    spec:
+      serviceAccountName: blockchain-sa
+      containers:
+        - name: gpu-miner-metrics
+          image: dagyss/monitor:v1.0.1
+          envFrom:
+            - secretRef:
+                name: monitor-secrets
