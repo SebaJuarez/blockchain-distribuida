@@ -8,7 +8,7 @@ set -x
 sudo apt-get update -y
 sudo apt-get install -y docker.io netcat-traditional
 
-# 2) Espero a que RabbitMQ estÃ© disponible
+# 2) Espero a que RabbitMQ este disponible
 until nc -z 10.0.0.7 5672; do
   sleep 5
 done
