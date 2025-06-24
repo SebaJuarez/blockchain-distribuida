@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blockchain-sa
+  namespace: infra
+  annotations:
+    iam.gke.io/gcp-service-account: python_miner@MODIFICARLOQUEVAACA.iam.gserviceaccount.com

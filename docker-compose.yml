@@ -29,26 +29,3 @@ services:
       timeout: 5s
       retries: 5
 
-  # Servicio del Nodo Coordinador de Blockchain
-  coordinator-node:
-    image: coordinator-node:latest
-    build: ./coordinator-node
-    depends_on: 
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: guest
-      SPRING_RABBITMQ_PASSWORD: guest
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: ""
-      BLOCKCHAIN_MINING_HASH_CHALLENGE: 0000
-      BLOCKCHAIN_MINING_TRANSACTIONS_PER_BLOCK: 5
-      BLOCKCHAIN_MINING_TASK_PUBLICATION_CRON: "0 */1 * * * *"
-    restart: on-failure

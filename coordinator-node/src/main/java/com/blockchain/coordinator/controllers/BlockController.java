@@ -3,7 +3,8 @@ package com.blockchain.coordinator.controllers;
 import com.blockchain.coordinator.dtos.MiningResult;
 import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Block;
-import com.blockchain.coordinator.services.BlockService;
+import com.blockchain.coordinator.services.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.ResponseEntity;
@@ -23,13 +24,13 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
 @RestController
 @RequestMapping("/api/blocks")
+@RequiredArgsConstructor
 public class BlockController {
 
     private final BlockService blockService;
-
-    public BlockController(BlockService blockService) {
-        this.blockService = blockService;
-    }
+    private final QueueAdminService queueAdminService;
+    private final CurrentMiningTaskService currentMiningTaskService;
+    private final MiningTaskNotifier miningTaskNotifier;
 
     @GetMapping("/status")
     public ResponseEntity<EntityModel<StatusResponse>> getStatus() {
@@ -85,16 +86,25 @@ public class BlockController {
     }
 
     @PostMapping("/result")
-    public ResponseEntity<?> validateBlock(@RequestBody MiningResult candidateBlock) {
-        Optional<Block> added = blockService.addMinedBlock(
+    public ResponseEntity<String> validateBlock(@RequestBody MiningResult candidateBlock) {
+        System.out.println("Coordinador: SE RECIBIO EL BLOQUE: " + candidateBlock.getBlockId() + " del minero: " + candidateBlock.getMinerId());
+        // valida si es el bloque candidato actual, el hash, la dificultad y la unicidad del previous_hash.
+        Optional<Block> addedBlock = blockService.addMinedBlock(
                 candidateBlock.getBlockId(),
                 candidateBlock.getNonce(),
                 candidateBlock.getHash()
         );
-        if (added.isPresent()) {
-            return ResponseEntity.ok("Bloque añadido correctamente.");
+
+        if (addedBlock.isPresent()) {
+            Block solvedBlock = addedBlock.get();
+            System.out.println("Coordinador: ¡Bloque " + solvedBlock.getHash() + " añadido exitosamente a la blockchain por el minero " + candidateBlock.getMinerId() + "!");
+            queueAdminService.purgeBlocksQueue();
+            miningTaskNotifier.notifySolvedCandidateBlock(candidateBlock.getBlockId(), candidateBlock.getMinerId());
+            currentMiningTaskService.clearCurrentTask();
+            return ResponseEntity.ok("Solución valida, Bloque añadido a la blockchain.");
         } else {
-            return ResponseEntity.badRequest().body("Falló la validación o ya fue resuelto.");
+            System.out.println("Coordinador: Falló la validación o ya fue resuelto el bloque: " + candidateBlock.getBlockId());
+            return ResponseEntity.badRequest().body("Falló la validación o el bloque ya fue resuelto por otro minero.");
         }
     }
 }
