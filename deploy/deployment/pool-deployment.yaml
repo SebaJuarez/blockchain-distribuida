@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:b691e92
+          image: sebajuarez/minerpool:c910244
           ports:
             - containerPort: 6060
           env:
