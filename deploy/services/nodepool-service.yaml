@@ -5,7 +5,7 @@ metadata:
   namespace: apps
 spec:
   type: LoadBalancer
-  loadBalancerIP: ##IP
+
   selector:
     app: node-pool
   ports:

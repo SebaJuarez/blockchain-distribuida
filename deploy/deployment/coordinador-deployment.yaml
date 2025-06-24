@@ -22,7 +22,9 @@ spec:
           image: sebajuarez/coordinador:d379e5f
           ports:
             - containerPort: 8080
-          envFrom:
-            - secretRef:
-                name: coordinador-secrets
+          env:
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"  # nombre del servicio RabbitMQ
+            - name: REDIS_HOST
+              value: "redis"  # nombre del servicio Redis
 

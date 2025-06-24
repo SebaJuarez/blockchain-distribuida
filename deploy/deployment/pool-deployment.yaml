@@ -22,6 +22,10 @@ spec:
           image: sebajuarez/minerpool:b691e92
           ports:
             - containerPort: 6060
-          envFrom:
-            - secretRef:
-                name: pool-secrets
+          env:
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"  # nombre del servicio RabbitMQ
+            - name: REDIS_HOST
+              value: "redis"  # nombre del servicio Redis
+            - name: METADATA_COORDINATOR_URL
+              value: "nodo-coordinador:8080"
