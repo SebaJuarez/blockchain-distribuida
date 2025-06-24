@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-pool
+  namespace: apps
+  labels:
+    app: node-pool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: node-pool
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: node-pool
+    spec:
+      containers:
+        - name: node-pool
+          image: sebajuarez/minerpool:12345
+          ports:
+            - containerPort: 6060
+          envFrom:
+            - secretRef:
+                name: pool-secrets

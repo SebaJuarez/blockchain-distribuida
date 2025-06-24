@@ -1,0 +1,8 @@
+/terraform
+
+!/terraform/main.tf
+!/terraform/terraform.tfvars
+
+/deploy/secrets
+!/deploy/secrets/*.example
+/minero-registrable/venv
