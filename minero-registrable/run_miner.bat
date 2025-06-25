@@ -20,8 +20,8 @@ if exist "requirements.txt" (
 )
 
 REM 4) Definir variables de entorno (ajústalas)
-set "POOL_BASE_URL=http://localhost:8081/api/pools"
-set "RABBITMQ_HOST=localhost"
+set "POOL_BASE_URL=http://35.239.200.118:8081/api/pools"
+set "RABBITMQ_HOST=35.239.206.202"
 
 REM 5) Ejecutar el miner
 python -m minero-registrable

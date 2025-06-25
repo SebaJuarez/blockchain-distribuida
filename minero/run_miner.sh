@@ -22,8 +22,8 @@ else
 fi
 
 # 4) Exportar variables de entorno (ajústalas a tu configuración)
-export BLOCKS_COORDINATOR_URL="${BLOCKS_COORDINATOR_URL:-http://localhost:8080/api/blocks/result}"
-export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
+export BLOCKS_COORDINATOR_URL="${BLOCKS_COORDINATOR_URL:-http://35.188.170.234:8080/api/blocks/result}"
+export RABBITMQ_HOST="${RABBITMQ_HOST:-35.239.206.202}"
 export MINER_ID="${MINER_ID:-miner-python-001}"
 
 # 5) Ejecutar el miner
