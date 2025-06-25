@@ -1,5 +1,6 @@
 package com.blockchain.coordinator.controllers;
 
+import com.blockchain.coordinator.dtos.CountResponse;
 import com.blockchain.coordinator.models.Transaction;
 import com.blockchain.coordinator.services.TransactionPoolService;
 import org.springframework.hateoas.CollectionModel;
@@ -17,6 +18,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
 @RestController
 @RequestMapping("/api/transactions")
+@CrossOrigin("*")
 public class TransactionController {
 
     private final TransactionPoolService transactionPoolService;
@@ -56,9 +58,11 @@ public class TransactionController {
     }
 
     @GetMapping("/pending/count")
-    public ResponseEntity<EntityModel<Integer>> getPendingTransactionCount() {
+    public ResponseEntity<EntityModel<CountResponse>> getPendingTransactionCount() {
         int count = transactionPoolService.getPendingTransactionCount();
-        EntityModel<Integer> countModel = EntityModel.of(count,
+        CountResponse countResponse = new CountResponse(count);
+
+        EntityModel<CountResponse> countModel = EntityModel.of(countResponse,
                 linkTo(methodOn(TransactionController.class).getPendingTransactionCount()).withSelfRel(),
                 linkTo(methodOn(TransactionController.class).getPendingTransactions()).withRel("view-pending-transactions"));
         return ResponseEntity.ok(countModel);
