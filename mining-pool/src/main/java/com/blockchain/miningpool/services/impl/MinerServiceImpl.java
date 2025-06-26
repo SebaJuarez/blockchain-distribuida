@@ -16,7 +16,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class MinerServiceImpl implements MinerService {
-
+    private Integer lastTargetSize = null;
     private final MinersRepository minersRepository;
     private final Compute compute;
     @Value("${gcp.project-id}")
@@ -78,16 +78,22 @@ public class MinerServiceImpl implements MinerService {
         // 2) Contar cuántos quedaron
         long remaining = minersRepository.count();
         int targetSize = (remaining == 0) ? 5 : 0;
-        System.out.println("Miners vivos: " + remaining + ". Ajustando MIG a " + targetSize);
+        System.out.println("Miners vivos: " + remaining + ". Estado deseado MIG: " + targetSize);
 
-        // 3) Ajustar tamaño del MIG
+        // 3) Si el estado no cambió, no hago nada
+        if (lastTargetSize != null && lastTargetSize == targetSize) {
+            System.out.println("Ya estaba en " + targetSize + ", no se vuelve a escalar.");
+            return;
+        }
+
+        // 4) Ajustar tamaño del MIG y actualizar flag
         try {
             Compute.InstanceGroupManagers.Resize request =
                     compute.instanceGroupManagers()
                             .resize(projectId, zone, migName, targetSize);
             Operation op = request.execute();
-            System.out.println("Resize iniciado: " + op.getName());
-            // opcional: esperar a que op.getStatus() sea "DONE"
+            System.out.println("Resize iniciado a " + targetSize + ": " + op.getName());
+            lastTargetSize = targetSize;
         } catch (Exception e) {
             System.err.println("Error al redimensionar MIG: " + e.getMessage());
         }
