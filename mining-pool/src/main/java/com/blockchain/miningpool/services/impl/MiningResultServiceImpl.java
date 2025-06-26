@@ -5,12 +5,16 @@ import com.blockchain.miningpool.feingClients.CoordinatorClient;
 import com.blockchain.miningpool.services.MiningResultService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class MiningResultServiceImpl implements MiningResultService {
+
+    @Value("${miner.id:ERROR_MARCA_DEPA}")
+    private String minerId;
 
     private final CoordinatorClient coordinatorClient;
 
@@ -26,6 +30,7 @@ public class MiningResultServiceImpl implements MiningResultService {
                 miningResult.getMinerId().isEmpty())
             return false;
         try {
+            miningResult.setMinerId(minerId);
             ResponseEntity<String> resp = coordinatorClient.sendResult(miningResult);
             return resp.getStatusCode().is2xxSuccessful();
         } catch (FeignException.BadRequest e) {

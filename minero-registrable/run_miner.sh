@@ -22,8 +22,8 @@ else
 fi
 
 # 4) Exportar variables de entorno (ajústalas a tu configuración)
-export POOL_BASE_URL ="${POOL_BASE_URL:-http://localhost:8080/api/pools}"
-export RABBITMQ_HOST="${RABBITMQ_HOST:-localhost}"
+export POOL_BASE_URL="${POOL_BASE_URL:-http://35.239.200.118:8081/api/pools}"
+export RABBITMQ_HOST="${RABBITMQ_HOST:-35.239.206.202}"
 
 # 5) Ejecutar el miner
 python -m minero-registrable

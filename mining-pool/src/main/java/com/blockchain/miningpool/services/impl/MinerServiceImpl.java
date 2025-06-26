@@ -3,7 +3,10 @@ package com.blockchain.miningpool.services.impl;
 import com.blockchain.miningpool.models.Miner;
 import com.blockchain.miningpool.repositories.MinersRepository;
 import com.blockchain.miningpool.services.MinerService;
+import com.google.api.services.compute.Compute;
+import com.google.api.services.compute.model.Operation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -13,8 +16,15 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class MinerServiceImpl implements MinerService {
-
+    private Integer lastTargetSize = null;
     private final MinersRepository minersRepository;
+    private final Compute compute;
+    @Value("${gcp.project-id}")
+    private String projectId;
+    @Value("${gcp.compute.zone}")
+    private String zone;
+    @Value("${gcp.compute.mig-name}")
+    private String migName;
 
     @Override
     public boolean addMiner(Miner miner) {
@@ -56,12 +66,36 @@ public class MinerServiceImpl implements MinerService {
     public void checkKeepAliveMiners(long keepAliveTimeout) {
         Instant cutoff = Instant.now().minusMillis(keepAliveTimeout);
 
-        for (Miner miner : minersRepository.findAll()) {
+        // 1) Borrar los miners pasados de cutoff
+        minersRepository.findAll().forEach(miner -> {
             if (miner.getLastTimestamp().isBefore(cutoff)) {
                 minersRepository.delete(miner);
                 System.out.println("Miner " + miner.getPublicKey() +
                         " fue borrado tras " + keepAliveTimeout + "ms sin keep-alive");
             }
+        });
+
+        // 2) Contar cuántos quedaron
+        long remaining = minersRepository.count();
+        int targetSize = (remaining == 0) ? 5 : 0;
+        System.out.println("Miners vivos: " + remaining + ". Estado deseado MIG: " + targetSize);
+
+        // 3) Si el estado no cambió, no hago nada
+        if (lastTargetSize != null && lastTargetSize == targetSize) {
+            System.out.println("Ya estaba en " + targetSize + ", no se vuelve a escalar.");
+            return;
+        }
+
+        // 4) Ajustar tamaño del MIG y actualizar flag
+        try {
+            Compute.InstanceGroupManagers.Resize request =
+                    compute.instanceGroupManagers()
+                            .resize(projectId, zone, migName, targetSize);
+            Operation op = request.execute();
+            System.out.println("Resize iniciado a " + targetSize + ": " + op.getName());
+            lastTargetSize = targetSize;
+        } catch (Exception e) {
+            System.err.println("Error al redimensionar MIG: " + e.getMessage());
         }
     }
 
@@ -73,5 +107,10 @@ public class MinerServiceImpl implements MinerService {
     @Override
     public List<Miner> getMiners() {
         return (List<Miner>) minersRepository.findAll();
+    }
+
+    @Override
+    public Optional<Miner> findById(String id) {
+        return minersRepository.findById(id);
     }
 }

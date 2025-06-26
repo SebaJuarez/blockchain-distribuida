@@ -38,6 +38,12 @@ public class DifficultyService {
         System.out.println("DifficultyService: Dificultad del sistema guardada en Redis: " + this.currentSystemChallenge);
     }
 
+    public void setCurrentChallenge(String newChallenge) {
+        this.currentSystemChallenge = newChallenge;
+        saveCurrentSystemChallenge();
+        System.out.println("DifficultyService: Dificultad del sistema establecida: " + newChallenge);
+    }
+
     public void decrementChallenge() {
         if (currentSystemChallenge.length() > 0) {
             this.currentSystemChallenge = currentSystemChallenge.substring(0, currentSystemChallenge.length() - 1);
