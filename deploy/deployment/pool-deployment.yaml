@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:4f54352
+          image: sebajuarez/minerpool:71be821
           ports:
             - containerPort: 8081
           envFrom:
