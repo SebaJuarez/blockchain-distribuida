@@ -106,6 +106,7 @@ public class MinerController {
     @PostMapping("/results")
     public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@RequestBody MiningResult result, HttpServletRequest request) {
         String clientIp = request.getRemoteAddr();
+        System.out.println(clientIp+" Envio un resultado");
         if (!minerService.isMinerExists(result.getMinerId()) && (!clientIp.startsWith("10") || !clientIp.startsWith("3"))) {
             RegisterResponse resp = new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no pertenece al pool");
             return ResponseEntity
