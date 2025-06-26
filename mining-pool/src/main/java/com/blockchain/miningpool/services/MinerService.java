@@ -3,6 +3,7 @@ package com.blockchain.miningpool.services;
 import com.blockchain.miningpool.models.Miner;
 
 import java.util.List;
+import java.util.Optional;
 
 
 public interface MinerService {
@@ -16,4 +17,6 @@ public interface MinerService {
     Long getMinersCount();
 
     List<Miner> getMiners();
+
+    Optional<Miner> findById(String id);
 }

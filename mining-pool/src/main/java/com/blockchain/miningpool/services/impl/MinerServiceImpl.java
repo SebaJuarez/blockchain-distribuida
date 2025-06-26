@@ -74,4 +74,9 @@ public class MinerServiceImpl implements MinerService {
     public List<Miner> getMiners() {
         return (List<Miner>) minersRepository.findAll();
     }
+
+    @Override
+    public Optional<Miner> findById(String id) {
+        return minersRepository.findById(id);
+    }
 }
