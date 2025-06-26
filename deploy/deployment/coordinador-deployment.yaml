@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: nodo-coordinador
-          image: sebajuarez/coordinador:baeccce
+          image: sebajuarez/coordinador:13cb258
           ports:
             - containerPort: 8080
           envFrom:
