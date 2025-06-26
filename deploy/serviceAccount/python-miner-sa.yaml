@@ -4,4 +4,4 @@ metadata:
   name: blockchain-sa
   namespace: infra
   annotations:
-    iam.gke.io/gcp-service-account: python_miner@MODIFICARLOQUEVAACA.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: python-miner-sa@gentle-oxygen-457917-c0.iam.gserviceaccount.com

@@ -6,7 +6,7 @@ metadata:
   labels:
     app: node-pool
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: node-pool
@@ -19,9 +19,9 @@ spec:
     spec:
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:12345
+          image: sebajuarez/minerpool:60b7352
           ports:
-            - containerPort: 6060
+            - containerPort: 8081
           envFrom:
             - secretRef:
                 name: pool-secrets

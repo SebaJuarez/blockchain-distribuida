@@ -32,4 +32,5 @@ jobs:
 
       - name: Aplicar manifests de Redis y Rabbit
         run: |
-          kubectl apply -f deploy/redis-rabbit/
+          kubectl apply -f deploy/namespaces/ \
+           kubectl apply -f deploy/redis-rabbit/
