@@ -24,6 +24,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RestController
 @RequestMapping("/api/pools")
 @RequiredArgsConstructor
+@CrossOrigin("*")
 public class MinerController {
 
     private final MinerService minerService;
