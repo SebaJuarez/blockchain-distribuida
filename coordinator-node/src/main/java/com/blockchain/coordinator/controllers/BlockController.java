@@ -94,6 +94,7 @@ public class BlockController {
         if (addedBlock.isPresent()) {
             Block solvedBlock = addedBlock.get();
             System.out.println("Coordinador: ¡Bloque " + solvedBlock.getHash() + " añadido exitosamente a la blockchain por el minero " + candidateBlock.getMinerId() + "!");
+            blockService.createRewardBlock(candidateBlock.getMinerId());
             queueAdminService.purgeBlocksQueue();
             miningTaskNotifier.notifySolvedCandidateBlock(candidateBlock.getBlockId(), candidateBlock.getMinerId());
             currentMiningTaskService.clearCurrentTask();

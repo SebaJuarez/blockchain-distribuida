@@ -220,12 +220,24 @@ public class BlockService {
         Block savedBlock = blockRepository.save(blockToSave);
 
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, savedBlock.getHash(), savedBlock.getTimestamp());
-
         this.latestBlock = savedBlock;
         this.latestBlockHash = savedBlock.getHash();
 
         System.out.println("BlockService: Se añadió correctamente el bloque a la blockchain: " + savedBlock.getHash() + " (Nonce: " + savedBlock.getNonce() + ", Index: " + savedBlock.getIndex() + ")");
         return Optional.of(savedBlock);
+    }
+
+    public void createRewardBlock(String minerId) {
+        long blockTimestamp = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
+        List<Transaction> blockTransactions = Collections.singletonList(new Transaction("system", minerId, 20.0));
+        Block recompenseBlock = new Block(latestBlock.getIndex() + 1, latestBlockHash, blockTransactions, blockTimestamp, 0, "");
+        recompenseBlock.setHash(calculateFinalBlockHash(recompenseBlock));
+
+        blockRepository.save(recompenseBlock);
+        redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, recompenseBlock.getHash(), recompenseBlock.getTimestamp());
+        this.latestBlock = recompenseBlock;
+        this.latestBlockHash = recompenseBlock.getHash();
+        System.out.println("BlockService: Se creo y añadió el bloque recompensa para el minero: " + minerId + " Bloque: " + recompenseBlock.getHash() + " (Index: " + recompenseBlock.getIndex() + ")");
     }
 
     public Optional<Block> getBlockByHash(String blockHash) {
