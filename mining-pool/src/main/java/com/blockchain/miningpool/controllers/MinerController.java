@@ -107,8 +107,13 @@ public class MinerController {
     public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@RequestBody MiningResult result, HttpServletRequest request) {
         String clientIp = request.getRemoteAddr();
         System.out.println(clientIp+" Envio un resultado");
-        if (!minerService.isMinerExists(result.getMinerId()) && (!clientIp.startsWith("10") || !clientIp.startsWith("3"))) {
-            RegisterResponse resp = new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no pertenece al pool");
+        boolean minerExists = minerService.isMinerExists(result.getMinerId());
+        boolean ipAllowed  = clientIp.startsWith("10.") || clientIp.startsWith("3");
+
+        if (!minerExists && !ipAllowed) {
+            RegisterResponse resp = new RegisterResponse(
+                    HttpStatus.FORBIDDEN,
+                    "Minero no pertenece al pool");
             return ResponseEntity
                     .status(HttpStatus.FORBIDDEN)
                     .body(EntityModel.of(resp));
