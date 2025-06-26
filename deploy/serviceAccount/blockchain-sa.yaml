@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blockchain-sa
+  namespace: apps
+  annotations:
+    iam.gke.io/gcp-service-account: python-miner-sa@gentle-oxygen-457917-c0.iam.gserviceaccount.com

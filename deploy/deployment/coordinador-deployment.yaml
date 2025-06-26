@@ -6,7 +6,7 @@ metadata:
   labels:
     app: nodo-coordinador
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: nodo-coordinador
@@ -19,10 +19,9 @@ spec:
     spec:
       containers:
         - name: nodo-coordinador
-          image: sebajuarez/coordinador:d379e5f
+          image: sebajuarez/coordinador:baeccce
           ports:
             - containerPort: 8080
           envFrom:
             - secretRef:
                 name: coordinador-secrets
-
