@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class MiningResultServiceImpl implements MiningResultService {
 
-    @Value("${miner.id}")
+    @Value("${miner.id:ERROR_MARCA_DEPA}")
     private String minerId;
 
     private final CoordinatorClient coordinatorClient;
