@@ -17,6 +17,7 @@ spec:
       labels:
         app: node-pool
     spec:
+      serviceAccountName: blockchain-sa
       containers:
         - name: node-pool
           image: sebajuarez/minerpool:71be821
