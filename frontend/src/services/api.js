@@ -1,22 +1,33 @@
-const BASE = 'http://localhost:8080/api';
+const BASE_BLOCKCHAIN_API = 'http://localhost:8080/api';
+const BASE_POOL_API = 'http://localhost:8081/api';
 
 /**
- * Fetches JSON data from the specified path.
+ * Fetches JSON data from the specified path, selecting the appropriate base URL.
  * @param {string} path - The API endpoint path.
  * @param {object} opts - Fetch options (method, headers, body, etc.).
  * @returns {Promise<object>} - A promise that resolves to the JSON response.
  */
 export async function fetchJSON(path, opts) {
+    let baseUrl = BASE_BLOCKCHAIN_API;
+    // Determina qué base URL usar basado en el prefijo de la ruta
+    if (path.startsWith('/pools')) {
+        baseUrl = BASE_POOL_API;
+    }
+
     try {
-        const res = await fetch(BASE + path, opts);
+        const res = await fetch(baseUrl + path, opts);
         if (!res.ok) {
             // Handle HTTP errors
             const errorBody = await res.json().catch(() => ({ message: res.statusText }));
             throw new Error(`HTTP error! Status: ${res.status}, Message: ${errorBody.message || 'Unknown error'}`);
         }
+        // Para los endpoints de dificultad que devuelven un string plano, no intentamos parsear JSON
+        if (path.startsWith('/difficulty') && res.headers.get('content-type')?.includes('text/plain')) {
+            return res.text();
+        }
         return res.json();
     } catch (error) {
-        console.error('API fetch error:', error);
+        console.error(`API fetch error for ${baseUrl + path}:`, error);
         // Re-throw to allow component-level error handling
         throw error;
     }
@@ -120,5 +131,28 @@ export const api = {
             }
         }
         return allBlocks;
-    }
+    },
+
+    /**
+     * Fetches the list of registered miners in the pool.
+     * @returns {Promise<object>} - List of miners.
+     */
+    getMiners: () => fetchJSON('/pools/miners'),
+
+    /**
+     * Fetches the current mining difficulty/challenge string.
+     * @returns {Promise<string>} - The current challenge string (e.g., "0000").
+     */
+    getDifficulty: () => fetchJSON('/difficulty'),
+
+    /**
+     * Sets a new mining difficulty/challenge string.
+     * @param {string} difficultyString - The new challenge string (e.g., "00000").
+     * @returns {Promise<string>} - The updated challenge string.
+     */
+    setDifficulty: (difficultyString) => fetchJSON('/difficulty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty: difficultyString })
+    }),
 };

@@ -1,10 +1,11 @@
 import { navbar, updateHeaderTitle } from './components/navbar.js';
 import { dashboard } from './components/dashboard.js';
 import { blockList } from './components/blockList.js';
-import { blockDetail } from './components/blockdetails.js';
+import { blockDetail } from './components/blockDetails.js';
 import { transactions } from './components/transactions.js';
 import { transactionDetail } from './components/transactionDetail.js';
-import { statistics } from './components/statistics.js'; // Import the new statistics component
+import { statistics } from './components/statistics.js';
+import { minerPool } from './components/minerPool.js';
 import { createEl } from './utils/dom.js';
 
 // Get root elements for navigation and main content
@@ -19,7 +20,8 @@ const navLinksData = [
     { name: 'Dashboard', hash: 'dashboard', icon: 'fas fa-chart-line' },
     { name: 'Blocks', hash: 'blocks', icon: 'fas fa-th-large' },
     { name: 'Transactions', hash: 'transactions', icon: 'fas fa-exchange-alt' },
-    { name: 'Statistics', hash: 'statistics', icon: 'fas fa-chart-bar' } // New statistics link
+    { name: 'Statistics', hash: 'statistics', icon: 'fas fa-chart-bar' },
+    { name: 'Miner Pool', hash: 'miner-pool', icon: 'fas fa-network-wired' } // Nuevo enlace para Miner Pool
 ];
 
 navLinksData.forEach(item => {
@@ -35,9 +37,6 @@ navLinksData.forEach(item => {
         updateHeaderTitle(item.name); // Update header title on nav click
         // Close sidebar on mobile after click
         if (window.innerWidth <= 768) {
-            // This might require a toggle button and state management for sidebar
-            // For now, assume sidebar collapses or is hidden on mobile and reappears on click.
-            // (Further logic needed if sidebar is collapsible, current CSS hides/shows based on grid)
         }
     });
 
@@ -74,9 +73,8 @@ function route() {
         updateHeaderTitle('Detalle del Bloque');
     } else if (currentRoute.startsWith('transactions/')) {
         updateHeaderTitle('Detalle de Transacción');
-    }
-     else {
-        updateHeaderTitle('Página Desconocida');
+    } else {
+        updateHeaderTitle('Página Desconocida'); // Default for unknown or dynamic routes
     }
 
     // Render component based on route
@@ -92,10 +90,11 @@ function route() {
     } else if (hash.startsWith('transactions/')) {
         const txId = hash.split('/')[1];
         transactionDetail(content, txId);
-    } else if (hash === 'statistics') { // New statistics route
+    } else if (hash === 'statistics') {
         statistics(content);
-    }
-    else {
+    } else if (hash === 'miner-pool') { // Nueva ruta para Miner Pool
+        minerPool(content);
+    } else {
         // Handle unknown routes or 404
         content.innerHTML = '';
         content.append(createEl('div', { className: 'bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative' },
