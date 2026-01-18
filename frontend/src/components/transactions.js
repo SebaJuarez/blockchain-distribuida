@@ -188,7 +188,7 @@ export async function transactions(root) {
 
             randomTxMessageContainer.innerHTML = '';
 
-            if (isNaN(totalTxs) || totalTxs < 1 || totalTxs > 1000) {
+            if (isNaN(totalTxs) || totalTxs < 1 || totalTxs > 1000000) {
                 const msg = createEl('div', { className: 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative' }, 'Por favor, introduce un número válido para "Total de TXs" (1-1000).');
                 randomTxMessageContainer.append(msg);
                 setTimeout(() => msg.remove(), 3000);
