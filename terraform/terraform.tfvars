@@ -1,5 +1,5 @@
 # GCP
-project_id       = "gentle-oxygen-457917-c0"
+project_id       = "majestic-stage-484717-f5"
 credentials_file = "terraform-sa-key.json"
 
 # Bucket para fragmentos de imagen
