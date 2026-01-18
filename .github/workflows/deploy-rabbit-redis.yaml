@@ -29,8 +29,8 @@ jobs:
           cluster_name: ${{ env.GKE_CLUSTER_NAME }}
           location:     ${{ env.GKE_CLUSTER_LOCATION }}
           project_id:   ${{ env.GCP_PROJECT_ID }}
-
+          
       - name: Aplicar manifests de Redis y Rabbit
         run: |
-          kubectl apply -f deploy/namespaces/ \
-           kubectl apply -f deploy/redis-rabbit/
+          kubectl apply -f deploy/namespaces/
+          kubectl apply -f deploy/redis-rabbit/
