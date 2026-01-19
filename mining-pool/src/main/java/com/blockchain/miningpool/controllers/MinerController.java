@@ -6,6 +6,7 @@ import com.blockchain.miningpool.dtos.StatusResponse;
 import com.blockchain.miningpool.models.Miner;
 import com.blockchain.miningpool.services.MinerService;
 import com.blockchain.miningpool.services.MiningResultService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
@@ -103,9 +104,10 @@ public class MinerController {
     }
 
     @PostMapping("/results")
-    public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@RequestBody MiningResult result) {
-        if (!minerService.isMinerExists(result.getMinerId())) {
-            RegisterResponse resp = new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no pertenece al pool");
+    public ResponseEntity<EntityModel<RegisterResponse>> registerMiningResult(@RequestBody MiningResult result, HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        if (!minerService.isMinerExists(result.getMinerId()) && !clientIp.startsWith("10") || !clientIp.startsWith("3")) {
+            RegisterResponse resp = new RegisterResponse(HttpStatus.FORBIDDEN, "Minero no pertenece al pool o IP no autorizada");
             return ResponseEntity
                     .status(HttpStatus.FORBIDDEN)
                     .body(EntityModel.of(resp));
