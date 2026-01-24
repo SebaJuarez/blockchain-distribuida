@@ -116,11 +116,6 @@ provider "google" {
 # --- IAM Y CUENTAS DE SERVICIO ---
 
 # Cuenta para Terraform (terraform-sa)
-resource "google_service_account" "terraform_sa" {
-  account_id   = "terraform-sa"
-  display_name = "terraform sa"
-  project      = var.project_id
-}
 
 resource "google_project_iam_member" "terraform_sa_roles" {
   for_each = toset([
