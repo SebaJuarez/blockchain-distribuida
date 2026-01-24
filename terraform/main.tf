@@ -123,7 +123,7 @@ resource "google_project_iam_member" "terraform_sa_roles" {
     "roles/storage.objectAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/iam.workloadIdentityPoolAdmin",
-    "roles/iam.projectIamAdmin",
+    "roles/resourcemanager.projectIamAdmin",
     "roles/compute.serviceAgent",
     "roles/container.serviceAgent",
     "roles/iam.serviceAccountTokenCreator",
