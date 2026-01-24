@@ -260,15 +260,6 @@ resource "google_compute_autoscaler" "python_miners_autoscaler" {
     max_replicas     = var.worker_max_nodes     # 5
     cooldown_period  = 30                       
 
-    cpu_utilization {
-      target = 0.6
-    }
-
-    metric {
-      name   = "custom.googleapis.com/gpu_alive_miners_count"
-      target = 1.0
-      type   = "GAUGE" 
-    }
   }
 }
 
