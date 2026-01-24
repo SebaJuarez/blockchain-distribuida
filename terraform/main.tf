@@ -349,3 +349,25 @@ resource "google_compute_firewall" "allow-redis" {
 
   source_ranges = ["0.0.0.0/0"]
 }
+
+
+resource "google_dns_managed_zone" "internal" {
+  name        = "internal-zone"
+  dns_name   = "internal."
+  visibility = "private"
+
+  private_visibility_config {
+    networks {
+      network_url = google_compute_network.vpc.self_link
+    }
+  }
+}
+
+
+resource "google_dns_record_set" "rabbitmq" {
+  name         = "rabbitmq.internal."
+  managed_zone = google_dns_managed_zone.internal.name
+  type         = "A"
+  ttl          = 300
+  rrdatas      = ["10.0.0.73"]
+}
