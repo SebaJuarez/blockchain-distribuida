@@ -132,7 +132,7 @@ resource "google_project_iam_member" "terraform_sa_roles" {
   ])
   project = var.project_id
   role    = each.key
-  member  = "serviceAccount:${google_service_account.terraform_sa.email}"
+  member  = "serviceAccount:terraform-sa@${var.project_id}.iam.gserviceaccount.com"
 }
 
 # Cuenta para los Miners (python-miner-sa)
