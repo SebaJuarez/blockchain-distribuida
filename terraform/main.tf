@@ -339,8 +339,8 @@ resource "google_compute_firewall" "allow-rabbitmq1" {
   source_ranges = ["0.0.0.0/0"]
 }
 
-resource "google_compute_firewall" "allow-rabbit-from-miners" {
-  name    = "allow-rabbit-from-miners"
+resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
+  name    = "allow-rabbit-from-miners-to-ilb"
   network = google_compute_network.vpc.name
 
   allow {
@@ -348,8 +348,8 @@ resource "google_compute_firewall" "allow-rabbit-from-miners" {
     ports    = ["5672", "15672"]
   }
 
-  source_tags = ["python-miner"]        # VMs del MIG
-  target_tags = [var.infra_node_tag]    # Nodos GKE infra
+  source_tags   = ["python-miner"]   # VMs del MIG
+  destination_ranges = ["10.0.0.0/16"]  # Subred donde vive el LB interno
 }
 
 resource "google_compute_firewall" "allow-redis" {
