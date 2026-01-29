@@ -251,6 +251,13 @@ resource "google_container_node_pool" "apps" {
   }
 }
 
+resource "google_compute_address" "rabbitmq_internal_ip" {
+  name         = "rabbitmq-internal-ip"
+  region       = var.region
+  subnetwork   = google_compute_subnetwork.subnet.id
+  address_type = "INTERNAL"
+}
+
 # --- COMPUTE WORKERS (MIG) ---
 
 resource "google_compute_instance_template" "python_miner" {
@@ -397,5 +404,5 @@ resource "google_dns_record_set" "rabbitmq" {
   managed_zone = google_dns_managed_zone.internal.name
   type         = "A"
   ttl          = 300
-  rrdatas      = ["10.0.0.73"]
+  rrdatas      = [google_compute_address.rabbitmq_internal_ip.address]
 }
