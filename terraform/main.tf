@@ -345,6 +345,19 @@ resource "google_compute_firewall" "allow-rabbitmq1" {
   source_ranges = ["0.0.0.0/0"]
 }
 
+resource "google_compute_firewall" "allow-rabbit-from-miners" {
+  name    = "allow-rabbit-from-miners"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5672", "15672"]
+  }
+
+  source_tags = ["python-miner"]        # VMs del MIG
+  target_tags = [var.infra_node_tag]    # Nodos GKE infra
+}
+
 resource "google_compute_firewall" "allow-redis" {
   name    = "allow-redis"
   network = google_compute_network.vpc.name
