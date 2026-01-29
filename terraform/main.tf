@@ -297,19 +297,6 @@ resource "google_compute_instance_group_manager" "python_miners" {
   target_size        = var.worker_min_nodes
 }
 
-resource "google_compute_autoscaler" "python_miners_autoscaler" {
-  name   = "python-miners-autoscaler"
-  zone   = var.zone
-  target = google_compute_instance_group_manager.python_miners.id
-
-  autoscaling_policy {
-    min_replicas    = var.worker_min_nodes
-    max_replicas    = var.worker_max_nodes
-    cooldown_period = 30
-
-  }
-}
-
 # --- FIREWALL ---
 
 resource "google_compute_firewall" "allow-ssh" {
