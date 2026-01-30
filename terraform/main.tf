@@ -199,6 +199,7 @@ resource "google_container_cluster" "primary" {
   network                  = google_compute_network.vpc.name
   subnetwork               = google_compute_subnetwork.subnet.name
   initial_node_count       = 1
+  deletion_protection      = false
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
