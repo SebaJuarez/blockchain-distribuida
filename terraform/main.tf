@@ -348,8 +348,8 @@ resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
     ports    = ["5672", "15672"]
   }
 
-  source_tags   = ["python-miner"]   # VMs del MIG
-  destination_ranges = ["10.0.0.0/16"]  # Subred donde vive el LB interno
+  source_tags        = ["python-miner"] 
+  destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
 
 resource "google_compute_firewall" "allow-redis" {
@@ -392,4 +392,6 @@ resource "google_dns_record_set" "rabbitmq" {
   type         = "A"
   ttl          = 300
   rrdatas      = [google_compute_address.rabbitmq_internal_ip.address]
+
+  depends_on = [ google_compute_address.rabbitmq_internal_ip ]
 }
