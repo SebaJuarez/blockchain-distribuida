@@ -252,13 +252,6 @@ resource "google_container_node_pool" "apps" {
   }
 }
 
-resource "google_compute_address" "rabbitmq_internal_ip" {
-  name         = "rabbitmq-internal-ip"
-  region       = var.region
-  subnetwork   = google_compute_subnetwork.subnet.id
-  address_type = "INTERNAL"
-}
-
 # --- COMPUTE WORKERS (MIG) ---
 
 resource "google_compute_instance_template" "python_miner" {
@@ -353,6 +346,18 @@ resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
   destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
 
+resource "google_compute_firewall" "allow-gke-ingress-internal" {
+  name    = "allow-gke-ingress-internal"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5672", "15672"]
+  }
+
+  source_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
+}
+
 resource "google_compute_firewall" "allow-redis" {
   name    = "allow-redis"
   network = google_compute_network.vpc.name
@@ -385,6 +390,14 @@ resource "google_dns_managed_zone" "internal" {
       network_url = google_compute_network.vpc.self_link
     }
   }
+}
+
+resource "google_compute_address" "rabbitmq_internal_ip" {
+  name         = "rabbitmq-internal-ip"
+  region       = var.region
+  subnetwork   = google_compute_subnetwork.subnet.id
+  address_type = "INTERNAL"
+  address      = "10.0.0.10"
 }
 
 resource "google_dns_record_set" "rabbitmq" {
