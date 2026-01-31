@@ -13,10 +13,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component("blockchainTaskScheduler")
 @RequiredArgsConstructor
 public class TaskScheduler {
+    
+    private static final Logger logger = LoggerFactory.getLogger(TaskScheduler.class);
 
     private final BlockService blockService;
     private final MiningTaskNotifier miningTaskNotifier;
@@ -40,14 +44,14 @@ public class TaskScheduler {
 
         if (coordinatorHasActiveMiningTask) {
             if (prevTask.getRetries() >= maxRetries) {
-                System.out.println("Scheduler: Se superaron " + maxRetries + " reintentos para el bloque " + prevTask.getBlock().getHash() + ". Descartando candidato.");
+                logger.warn("Scheduler: Se superaron {} reintentos para el bloque {}. Descartando candidato.", maxRetries, prevTask.getBlock().getHash());
                 difficultyService.decrementChallenge();
                 miningTaskNotifier.notifyMiningTaskDropped(prevTask.getBlock().getHash());
                 currentMiningTaskService.clearCurrentTask();
                 queueAdminService.purgeBlocksQueue();
             } else {
                 currentMiningTaskService.incrementCurrentTaskRetries();
-                System.out.println("Scheduler: Tarea de minería (" + prevTask.getBlock().getHash() + ") persistente, reintentos: " + prevTask.getRetries() + ".");
+                logger.info("Scheduler: Tarea de minería ({}) persistente, reintentos: {}.", prevTask.getBlock().getHash(), prevTask.getRetries());
                 return;
             }
         }
@@ -55,7 +59,7 @@ public class TaskScheduler {
         int pending = transactionPoolService.getPendingTransactionCount();
 
         if (pending >= minTransactionsPerBlock) {
-            System.out.println("Scheduler: No hay tarea activa o la anterior fue descartada. Creando y publicando nuevo bloque candidato (tarea de minería).");
+            logger.info("Scheduler: No hay tarea activa o la anterior fue descartada. Creando y publicando nuevo bloque candidato (tarea de minería).");
             Block newBlock = blockService.createNewMiningCandidateBlock(maxTransactionsPerBlock);
             if (newBlock != null) {
                 String challengeForNewTask = difficultyService.getCurrentChallenge();
@@ -63,11 +67,10 @@ public class TaskScheduler {
                 currentMiningTaskService.saveCurrentTask(newTask);
                 miningTaskNotifier.notifyNewMiningTask(newBlock, challengeForNewTask, 0);
             } else {
-                System.out.println("Scheduler: No hay transacciones suficientes para crear el bloque candidato.");
+                logger.warn("Scheduler: No hay transacciones suficientes para crear el bloque candidato.");
             }
         } else {
-            System.out.println("Scheduler: No hay transacciones suficientes para crear el bloque candidato. Actualmente: "
-                    + pending + ". Requerido: " + minTransactionsPerBlock);
+            logger.info("Scheduler: No hay transacciones suficientes para crear el bloque candidato. Actualmente: {}. Requerido: {}", pending, minTransactionsPerBlock);
         }
     }
 }

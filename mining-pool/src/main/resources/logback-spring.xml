@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="nombreApp" source="spring.application.name" defaultValue="java-app"/>
+    <springProperty scope="context" name="entornoApp" source="spring.aplication.profile" defaultValue="dev"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <pattern>
+                    <pattern>
+                        {
+                        "aplicacion": "${nombreApp}",
+                        "entorno": "${entornoApp}"
+                        }
+                    </pattern>
+                </pattern>
+                <mdc/>
+                <arguments/>
+                <stackTrace/>
+            </providers>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.blockchain.coordinator" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="org.springframework" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <logger name="org.springframework.amqp" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+</configuration>

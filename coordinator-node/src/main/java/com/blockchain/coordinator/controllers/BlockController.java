@@ -16,12 +16,16 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/blocks")
 @RequiredArgsConstructor
 @CrossOrigin("*")
 public class BlockController {
+
+    private static final Logger logger = LoggerFactory.getLogger(BlockController.class);
 
     private final BlockService blockService;
     private final QueueAdminService queueAdminService;
@@ -83,7 +87,7 @@ public class BlockController {
 
     @PostMapping("/result")
     public ResponseEntity<String> validateBlock(@RequestBody MiningResult candidateBlock) {
-        System.out.println("Coordinador: SE RECIBIO EL BLOQUE: " + candidateBlock.getBlockId() + " del minero: " + candidateBlock.getMinerId());
+        logger.info("Se recibio el bloque {} del minero {}", candidateBlock.getBlockId(), candidateBlock.getMinerId());
         // valida si es el bloque candidato actual, el hash, la dificultad y la unicidad del previous_hash.
         Optional<Block> addedBlock = blockService.addMinedBlock(
                 candidateBlock.getBlockId(),
@@ -93,14 +97,14 @@ public class BlockController {
 
         if (addedBlock.isPresent()) {
             Block solvedBlock = addedBlock.get();
-            System.out.println("Coordinador: ¡Bloque " + solvedBlock.getHash() + " añadido exitosamente a la blockchain por el minero " + candidateBlock.getMinerId() + "!");
+            logger.info("Bloque {} añadido exitosamente a la blockchain por el minero {}", solvedBlock.getHash(), candidateBlock.getMinerId());
             blockService.createRewardBlock(candidateBlock.getMinerId());
             queueAdminService.purgeBlocksQueue();
             miningTaskNotifier.notifySolvedCandidateBlock(candidateBlock.getBlockId(), candidateBlock.getMinerId());
             currentMiningTaskService.clearCurrentTask();
             return ResponseEntity.ok("Solución valida, Bloque añadido a la blockchain.");
         } else {
-            System.out.println("Coordinador: Falló la validación o ya fue resuelto el bloque: " + candidateBlock.getBlockId());
+            logger.warn("Fallo la validacion o ya fue resuelto el bloque: {}", candidateBlock.getBlockId());
             return ResponseEntity.badRequest().body("Falló la validación o el bloque ya fue resuelto por otro minero.");
         }
     }

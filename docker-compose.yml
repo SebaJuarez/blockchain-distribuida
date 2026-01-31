@@ -1,6 +1,24 @@
-version: '3.8' # Especifica la versión de Docker Compose
+version: '3.8'
 
 services:
+
+  coordinator-node:
+      build: ./coordinator-node
+      container_name: coordinator-node
+      ports:
+        - "8080:8080"
+      environment:
+        - SPRING_PROFILES_ACTIVE=dev
+        - SPRING_REDIS_HOST=redis
+        - SPRING_REDIS_PORT=6379
+        - SPRING_RABBIT_HOST=rabbitmq
+        - SPRING_RABBIT_PORT=5672
+      depends_on:
+        redis:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+
   # Servicio de RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -29,3 +47,46 @@ services:
       timeout: 5s
       retries: 5
 
+# Servicio de Prometheus
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus:/etc/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+# Servicio de Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+  # Servicio de Loki (Almacenamiento de logs)
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Servicio de Promtail (Recolector de logs)
+  promtail:
+      image: grafana/promtail:2.9.0
+      container_name: promtail
+      user: "0" 
+      volumes:
+        - ./observability/promtail:/etc/promtail 
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /var/lib/docker/containers:/var/lib/docker/containers:ro 
+      command: -config.file=/etc/promtail/promtail.yml
+      depends_on:
+        - loki
