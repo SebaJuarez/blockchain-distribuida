@@ -7,6 +7,7 @@ set -x
 RABBIT_HOST="rabbitmq.internal"
 RABBIT_PORT="5672"
 
+
 # 1) Actualizo repositorios e instalo dependencias
 sudo apt-get update -y
 sudo apt-get install -y docker.io netcat-traditional
@@ -22,6 +23,7 @@ sudo docker run --rm \
   -e RABBITMQ_USER=guest \
   -e RABBITMQ_PASS=guest \
   -e RABBITMQ_PORT=$RABBIT_PORT \
+  -e POOL_BASE_URL=http://nodepool.internal:8081/api/pools \
   dagyss/minero-registrable-cpu:latest
 
 # 4) Fin del script
