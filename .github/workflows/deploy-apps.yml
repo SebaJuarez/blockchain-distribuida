@@ -1,0 +1,35 @@
+name: Deploy Apps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+      GKE_CLUSTER_LOCATION: ${{ secrets.GKE_CLUSTER_LOCATION }}  # zone o region
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Autenticar con GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ env.GOOGLE_CREDENTIALS }}
+
+      - name: Obtener credenciales de GKE
+        uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER_NAME }}
+          location:     ${{ env.GKE_CLUSTER_LOCATION }}
+          project_id:   ${{ env.GCP_PROJECT_ID }}
+
+      - name: Aplicar manifests de Redis y Rabbit
+        run: |
+          kubectl apply -f deploy/deployment/ \
+          kubectl apply -f deploy/serviceAccount/ \
+          kubectl apply -f deploy/services/
+        
