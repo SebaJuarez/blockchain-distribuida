@@ -9,6 +9,8 @@ import com.blockchain.miningpool.services.QueueAdmin;
 import com.blockchain.miningpool.services.WorkerDispatcher;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -17,6 +19,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class ControlEventListener {
+
+    private static final Logger logger = LoggerFactory.getLogger(ControlEventListener.class);
 
     private final WorkerDispatcher dispatcher;
     private final MinerService minerService;
@@ -33,7 +37,7 @@ public class ControlEventListener {
 
         try {
             payload = rabbitTemplate.getMessageConverter().fromMessage(rawMessage);
-            System.out.println("Recibido evento de control de minería. Payload deserializado: " + payload);
+            logger.debug("Recibido evento de control de minería. Payload deserializado: " + payload);
 
             if (payload instanceof MiningTask task && task.getEvent() == ExchangeEvent.NEW_CANDIDATE_BLOCK) {
                 long gpusMinersActive = minerService.getMinersCount();
@@ -44,7 +48,7 @@ public class ControlEventListener {
 
                 int numberOfDivisions = (gpusMinersActive > 0) ? (int) gpusMinersActive : 5;
 
-                System.out.println("Dividiendo el rango de nonce entre " + numberOfDivisions + " workers. Rango total: " +
+                logger.info("Dividiendo el rango de nonce entre " + numberOfDivisions + " workers. Rango total: " +
                         fullNonceRangeStart + " a " + fullNonceRangeEnd);
 
                 if (numberOfDivisions < 1) numberOfDivisions = 1;
@@ -64,7 +68,7 @@ public class ControlEventListener {
                         currentTo = fullNonceRangeEnd;
                     }
 
-                    System.out.println("Despachando subtarea #" + (i + 1) + ": nonce de " + currentFrom + " a " + currentTo);
+                    logger.debug("Despachando subtarea #" + (i + 1) + ": nonce de " + currentFrom + " a " + currentTo);
 
                     dispatcher.dispatchSubTasks(
                             task.getBlock(),
@@ -83,12 +87,12 @@ public class ControlEventListener {
                 dispatcher.broadcastCancel(dropped.getPreliminaryHashBlockResolved());
                 queueAdmin.purgeSubTasksQueue();
             } else {
-                System.err.println("Tipo de payload inesperado: " + payload.getClass().getName());
+                logger.error("Tipo de payload inesperado: " + payload.getClass().getName());
             }
 
             ch.basicAck(tag, false);
         } catch (Exception e) {
-            System.err.println("Error procesando evento de control de minería: " + e.getMessage());
+            logger.error("Error procesando evento de control de minería: " + e.getMessage(), e);
             ch.basicNack(tag, false, false);
             throw e;
         }

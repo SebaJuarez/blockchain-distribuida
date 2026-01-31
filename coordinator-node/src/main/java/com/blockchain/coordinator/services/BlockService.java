@@ -8,6 +8,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -24,7 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class BlockService {
-
+    private static final Logger logger = LoggerFactory.getLogger(BlockService.class);
+    
     public final BlockRepository blockRepository;
     private final TransactionPoolService transactionPoolService;
     private final RedisTemplate<String, String> redisTemplate;
@@ -68,13 +71,13 @@ public class BlockService {
                 if (lastKnownBlock.isPresent()) {
                     this.latestBlock = lastKnownBlock.get();
                     this.latestBlockHash = latestBlock.getHash();
-                    System.out.println("BlockService: Se cargó el ultimo bloque desde redis : " + latestBlockHash);
+                    logger.info("BlockService: Se cargó el ultimo bloque desde redis : {}", latestBlockHash);
                 } else {
-                    System.err.println("BlockService: Inconsistency: Latest block hash '" + lastBlockHashStr + "' found in sorted set, but block object not found in hash store. Recreating Genesis.");
+                    logger.error("BlockService: Inconsistency: Latest block hash '{}' found in sorted set, but block object not found in hash store. Recreating Genesis.", lastBlockHashStr);
                     createGenesisBlock();
                 }
             } else {
-                System.err.println("BlockService: Inconsistencia: ZSet size es > 0 pero reverseRange devolvio vacio. Recreando el bloque genesis.");
+                logger.error("BlockService: Inconsistencia: ZSet size es > 0 pero reverseRange devolvio vacio. Recreando el bloque genesis.");
                 createGenesisBlock();
             }
         }
@@ -92,13 +95,13 @@ public class BlockService {
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, genesisBlock.getHash(), genesisBlock.getTimestamp());
         this.latestBlock = genesisBlock;
         this.latestBlockHash = genesisBlock.getHash();
-        System.out.println("BlockService: Se creo el bloque genesis: " + genesisBlock.getHash() + " (Index: " + genesisBlock.getIndex() + ")");
+        logger.info("BlockService: Se creo el bloque genesis: {} (Index: {})", genesisBlock.getHash(), genesisBlock.getIndex());
     }
 
     public Block createNewMiningCandidateBlock(int numberOfTransactions) {
         List<Transaction> transactions = transactionPoolService.getPendingTransactions(numberOfTransactions);
         if (transactions.isEmpty()) {
-            System.out.println("BlockService: No hay transacciones pendientes para crear el bloque.");
+            logger.debug("BlockService: No hay transacciones pendientes para crear el bloque.");
             return null;
         }
 
@@ -112,8 +115,7 @@ public class BlockService {
         String preliminaryHash = calculateBlockContentHash(newBlock);
         newBlock.setHash(preliminaryHash);
 
-        System.out.println("BlockService: Se creó el bloque candidato con el id (hash): " + preliminaryHash +
-                " para el bloque previo: " + previousHash + " (Index: " + newBlockIndex + ")");
+        logger.info("BlockService: Se creó el bloque candidato con el id (hash): {} para el bloque previo: {} (Index: {})", preliminaryHash, previousHash, newBlockIndex);
         return newBlock;
     }
 
@@ -142,7 +144,7 @@ public class BlockService {
     public boolean verifyMiningSolution(String blockId, long nonce, String solvedBlockHash) {
         MiningTask currentTask = currentMiningTaskService.getCurrentTask();
         if (currentTask == null || !currentTask.getBlock().getHash().equals(blockId)) {
-            System.out.println("BlockService: No se encontró el bloque candidato activo con id: " + blockId + " o no coincide con la tarea actual. Puede que haya expirado o ya se procesó.");
+            logger.warn("BlockService: No se encontró el bloque candidato activo con id: {} o no coincide con la tarea actual. Puede que haya expirado o ya se procesó.", blockId);
             return false;
         }
 
@@ -154,7 +156,7 @@ public class BlockService {
             blockForVerification = (Block) blockCandidate.clone();
             blockForVerification.setNonce(nonce);
         } catch (CloneNotSupportedException e) {
-            System.err.println("BlockService: Error al clonar el bloque para verificación: " + e.getMessage());
+            logger.error("BlockService: Error al clonar el bloque para verificación: {}", e.getMessage(), e);
             return false;
         }
 
@@ -164,14 +166,14 @@ public class BlockService {
         boolean difficultyMet = solvedBlockHash.startsWith(challengeForThisTask);
 
         if (!hashMatches) {
-            System.out.printf(
-                    "BlockService: Fallo la verificación del bloque %s: hash calculado=%s, hash entregado=%s%n",
+            logger.info(
+                    "BlockService: Fallo la verificación del bloque %s: hash calculado=%s, hash entregado=%s",
                     blockId, calculatedHash, solvedBlockHash
             );
         }
         if (!difficultyMet) {
-            System.out.printf(
-                    "BlockService: Fallo la dificultad para el bloque %s: hash entregado=%s, prefijo requerido=%s%n",
+            logger.info(
+                    "BlockService: Fallo la dificultad para el bloque %s: hash entregado=%s, prefijo requerido=%s",
                     blockId, solvedBlockHash, challengeForThisTask
             );
         }
@@ -182,13 +184,13 @@ public class BlockService {
     public Optional<Block> addMinedBlock(String blockId, long nonce, String solvedBlockHash) {
         MiningTask currentTask = currentMiningTaskService.getCurrentTask();
         if (currentTask == null || !currentTask.getBlock().getHash().equals(blockId)) {
-            System.out.println("BlockService: No se encontró el bloque candidato activo con id: " + blockId + " o no coincide con la tarea actual. Puede que haya expirado o ya se procesó.");
+            logger.warn("BlockService: No se encontró el bloque candidato activo con id: " + blockId + " o no coincide con la tarea actual. Puede que haya expirado o ya se procesó.");
             return Optional.empty();
         }
         Block verifiedBlockCandidate = currentTask.getBlock();
 
         if (!verifyMiningSolution(blockId, nonce, solvedBlockHash)) {
-            System.out.println("BlockService: Error al añadir el bloque: falló la verificación para el id:  " + blockId);
+            logger.error("BlockService: Error al añadir el bloque: falló la verificación para el id:  {}, hash recibido: {}", blockId, solvedBlockHash);
             return Optional.empty();
         }
 
@@ -196,12 +198,12 @@ public class BlockService {
         Boolean acquiredLock = redisTemplate.opsForValue().setIfAbsent(previousHashLockKey, solvedBlockHash, 5, TimeUnit.MINUTES);
 
         if (acquiredLock == null || !acquiredLock) {
-            System.out.println("BlockService: Otro bloque fue aceptado por su previousHash: " + verifiedBlockCandidate.getPrevious_hash() + ". Descartando bloque: " + solvedBlockHash);
+            logger.info("BlockService: Otro bloque fue aceptado por su previousHash: {}. Descartando bloque: {}", verifiedBlockCandidate.getPrevious_hash(), solvedBlockHash);
             return Optional.empty();
         }
 
         if (!verifiedBlockCandidate.getPrevious_hash().equals(this.latestBlockHash)) {
-            System.out.println("BlockService: El hash previo del bloque minado (" + verifiedBlockCandidate.getPrevious_hash() + ") no coincide con el bloque actual (" + this.latestBlockHash + "). Posible bifurcación.");
+            logger.error("BlockService: El hash previo del bloque minado ({}) no coincide con el bloque actual ({}). Posible bifurcación.", verifiedBlockCandidate.getPrevious_hash(), this.latestBlockHash);
             redisTemplate.delete(previousHashLockKey);
             return Optional.empty();
         }
@@ -213,7 +215,7 @@ public class BlockService {
             blockToSave.setHash(solvedBlockHash);
             blockToSave.setTimestamp(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC));
         } catch (CloneNotSupportedException e) {
-            System.err.println("BlockService: Error al clonar el bloque final para guardar: " + e.getMessage());
+            logger.error("BlockService: Error al clonar el bloque final para guardar: {}", e.getMessage(), e);
             return Optional.empty();
         }
 
@@ -223,7 +225,7 @@ public class BlockService {
         this.latestBlock = savedBlock;
         this.latestBlockHash = savedBlock.getHash();
 
-        System.out.println("BlockService: Se añadió correctamente el bloque a la blockchain: " + savedBlock.getHash() + " (Nonce: " + savedBlock.getNonce() + ", Index: " + savedBlock.getIndex() + ")");
+        logger.info("BlockService: Se añadió correctamente el bloque a la blockchain: {} (Nonce: {}, Index: {})", savedBlock.getHash(), savedBlock.getNonce(), savedBlock.getIndex());
         return Optional.of(savedBlock);
     }
 
@@ -237,7 +239,7 @@ public class BlockService {
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, recompenseBlock.getHash(), recompenseBlock.getTimestamp());
         this.latestBlock = recompenseBlock;
         this.latestBlockHash = recompenseBlock.getHash();
-        System.out.println("BlockService: Se creo y añadió el bloque recompensa para el minero: " + minerId + " Bloque: " + recompenseBlock.getHash() + " (Index: " + recompenseBlock.getIndex() + ")");
+        logger.info("BlockService: Se creo y añadió el bloque recompensa para el minero: {} Bloque: {} (Index: {})", minerId, recompenseBlock.getHash(), recompenseBlock.getIndex());
     }
 
     public Optional<Block> getBlockByHash(String blockHash) {

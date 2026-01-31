@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class TransactionPoolService {
+
+    private static final Logger logger = LoggerFactory.getLogger(TransactionPoolService.class);
 
     // Cola concurrente para almacenar las transacciones pendientes en memoria
     private final Queue<Transaction> pendingTransactions = new ConcurrentLinkedQueue<>();
@@ -35,7 +39,7 @@ public class TransactionPoolService {
      // Agrega una nueva transacción al pool de transacciones pendientes en memoria y la almacena en Redis.
     public void addTransaction(Transaction transaction) {
         pendingTransactions.offer(transaction); // Añade al final de la cola en memoria
-        System.out.println("Transaction añadida al pool (en memoria): " + transaction.getId());
+        logger.debug("Transaction añadida al pool (en memoria): " + transaction.getId());
 
         // Se almacena la transacción individualmente en Redis (La clave sigue el patrón "transactions:{timestamp}:{sender}")
         String transactionIdKey = "transactions:" + transaction.getTimestamp() + ":" + transaction.getSender();
@@ -47,14 +51,14 @@ public class TransactionPoolService {
                             e -> e.getValue() != null ? String.valueOf(e.getValue()) : null
                     ));
             redisTemplate.opsForHash().putAll(transactionIdKey, stringMap);
-            System.out.println("Transaccion guardada en redis: " + transactionIdKey);
+            logger.debug("Transaccion guardada en redis: " + transactionIdKey);
         } catch (IllegalArgumentException e) {
-            System.err.println("Error en la conversion de la transaccion: " + e.getMessage());
+            logger.error("Error en la conversion de la transaccion: " + e.getMessage(), e);
             try {
                 redisTemplate.opsForValue().set(transactionIdKey, objectMapper.writeValueAsString(transaction));
-                System.out.println("Se guarda como string formateada JSON en Redis: " + transactionIdKey);
+                logger.debug("Se guarda como string formateada JSON en Redis: " + transactionIdKey);
             } catch (Exception jsonE) {
-                System.err.println("Error al guardar la transaccion formateada a JSON string: " + jsonE.getMessage());
+                logger.error("Error al guardar la transaccion formateada a JSON string: " + jsonE.getMessage(), jsonE);
             }
         }
     }
