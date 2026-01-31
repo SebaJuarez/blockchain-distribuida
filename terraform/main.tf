@@ -3,7 +3,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 5.0, < 7.0"
+      version = ">= 5.0, < 7.0" 
     }
   }
   backend "gcs" {
@@ -342,7 +342,7 @@ resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
     ports    = ["5672", "15672"]
   }
 
-  source_tags        = ["python-miner"]
+  source_tags        = ["python-miner"] 
   destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
 
@@ -355,7 +355,7 @@ resource "google_compute_firewall" "allow-nodepool-from-miners-to-ilb" {
     ports    = ["8081"]
   }
 
-  source_tags        = ["python-miner"]
+  source_tags        = ["python-miner"] 
   destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
 

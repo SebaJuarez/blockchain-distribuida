@@ -1,14 +1,10 @@
-name: Deploy Redis & Rabbit
+name: Deploy Apps
 
 on:
-  workflow_run:
-    workflows: ["Terraform Plan & Apply"]
-    types: [completed]
   workflow_dispatch:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -30,8 +26,10 @@ jobs:
           cluster_name: ${{ env.GKE_CLUSTER_NAME }}
           location:     ${{ env.GKE_CLUSTER_LOCATION }}
           project_id:   ${{ env.GCP_PROJECT_ID }}
-          
+
       - name: Aplicar manifests de Redis y Rabbit
         run: |
-          kubectl apply -f deploy/namespaces/
-          kubectl apply -f deploy/redis-rabbit/
+          kubectl apply -f deploy/deployment/ \
+          kubectl apply -f deploy/serviceAccount/ \
+          kubectl apply -f deploy/services/
+        
