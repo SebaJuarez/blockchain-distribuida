@@ -3,25 +3,25 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 4.0"
+      version = ">= 5.0, < 7.0" 
     }
   }
   backend "gcs" {
-        bucket      = var.bucket_backend
-        prefix      = var.backend_prefix
+    bucket = var.bucket_backend
+    prefix = var.backend_prefix
   }
 }
 
-# Variables
+# --- VARIABLES ---
 
 variable "bucket_backend" {
-    type        = string
-    description = "GCS bucket para el estado de Terraform"
+  type        = string
+  description = "GCS bucket para el estado de Terraform"
 }
 
 variable "backend_prefix" {
-    type        = string
-    description = "Path/prefix dentro del bucket"
+  type        = string
+  description = "Path/prefix dentro del bucket"
 }
 
 variable "project_id" {
@@ -88,7 +88,6 @@ variable "worker_max_nodes" {
   default     = 5
 }
 
-
 variable "network" {
   description = "VPC donde desplegar clúster y VMs"
   type        = string
@@ -109,12 +108,65 @@ variable "infra_node_tag" {
 
 # Provider
 provider "google" {
-  project     = var.project_id
-  region      = var.region
-  zone        = var.zone
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
 }
 
-# VPC and Subnet
+# --- IAM Y CUENTAS DE SERVICIO ---
+
+# Cuenta para Terraform (terraform-sa)
+
+resource "google_project_iam_member" "terraform_sa_roles" {
+  for_each = toset([
+    "roles/storage.admin",
+    "roles/storage.objectAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.workloadIdentityPoolAdmin",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/compute.serviceAgent",
+    "roles/container.serviceAgent",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/editor",
+    "roles/viewer"
+  ])
+  project = var.project_id
+  role    = each.key
+  member  = "serviceAccount:terraform-sa@${var.project_id}.iam.gserviceaccount.com"
+}
+
+# Cuenta para los Miners (python-miner-sa)
+resource "google_service_account" "python_miner" {
+  project    = var.project_id
+  account_id = "python-miner-sa"
+}
+
+resource "google_project_iam_member" "python_miner_roles" {
+  for_each = toset([
+    "roles/monitoring.metricWriter",
+    "roles/compute.instanceAdmin.v1",
+    "roles/iam.serviceAccountTokenCreator"
+  ])
+  project = var.project_id
+  role    = each.key
+  member  = "serviceAccount:${google_service_account.python_miner.email}"
+}
+
+# Workload Identity (Permisos para que K8s use la cuenta de Google)
+resource "google_service_account_iam_member" "allow_k8s_infra_impersonate" {
+  service_account_id = google_service_account.python_miner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[infra/blockchain-sa]"
+}
+
+resource "google_service_account_iam_member" "allow_k8s_apps_impersonate" {
+  service_account_id = google_service_account.python_miner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[apps/blockchain-sa]"
+}
+
+# --- INFRAESTRUCTURA DE RED ---
+
 resource "google_compute_network" "vpc" {
   name                    = var.network
   auto_create_subnetworks = false
@@ -137,7 +189,8 @@ resource "google_compute_subnetwork" "subnet" {
   }
 }
 
-# GKE Cluster
+# --- GKE CLUSTER ---
+
 resource "google_container_cluster" "primary" {
   name                     = var.cluster_name
   location                 = var.zone
@@ -146,6 +199,7 @@ resource "google_container_cluster" "primary" {
   network                  = google_compute_network.vpc.name
   subnetwork               = google_compute_subnetwork.subnet.name
   initial_node_count       = 1
+  deletion_protection      = false
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
@@ -155,7 +209,7 @@ resource "google_container_cluster" "primary" {
     cluster_secondary_range_name  = "gke-cluster-secondary-range"
     services_secondary_range_name = "gke-services-secondary-range"
   }
-  
+
   node_config {
     machine_type = var.machine_type
     disk_size_gb = var.boot_disk_size_gb
@@ -164,17 +218,16 @@ resource "google_container_cluster" "primary" {
   }
 }
 
-# Node pool infra
 resource "google_container_node_pool" "infra" {
   name     = "${var.cluster_name}-infra"
   cluster  = google_container_cluster.primary.name
   location = var.zone
   node_config {
     machine_type = var.machine_type
-    disk_size_gb  = var.boot_disk_size_gb
-    disk_type     = var.disk_type
-    labels        = { role = "infra" }
-    tags          = [var.infra_node_tag]
+    disk_size_gb = var.boot_disk_size_gb
+    disk_type    = var.disk_type
+    labels       = { role = "infra" }
+    tags         = [var.infra_node_tag]
   }
   autoscaling {
     min_node_count = var.node_count
@@ -182,16 +235,15 @@ resource "google_container_node_pool" "infra" {
   }
 }
 
-# Node pool apps
 resource "google_container_node_pool" "apps" {
   name     = "${var.cluster_name}-apps"
   cluster  = google_container_cluster.primary.name
   location = var.zone
   node_config {
     machine_type = var.machine_type
-    disk_size_gb  = var.boot_disk_size_gb
-    disk_type     = var.disk_type
-    labels        = { role = "app" }
+    disk_size_gb = var.boot_disk_size_gb
+    disk_type    = var.disk_type
+    labels       = { role = "app" }
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
   autoscaling {
@@ -200,17 +252,7 @@ resource "google_container_node_pool" "apps" {
   }
 }
 
-# Sobel Worker VMs
-resource "google_service_account" "python_miner" {
-  project    = var.project_id
-  account_id = "python-miner-sa"
-}
-
-resource "google_project_iam_member" "python_miner_metrics_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.python_miner.email}"
-}
+# --- COMPUTE WORKERS (MIG) ---
 
 resource "google_compute_instance_template" "python_miner" {
   name_prefix = "python-miner-"
@@ -230,19 +272,18 @@ resource "google_compute_instance_template" "python_miner" {
   }
 
   machine_type = var.machine_type
-
   metadata_startup_script = file("${path.module}/startup-miner.sh")
 
   network_interface {
     network    = google_compute_network.vpc.id
     subnetwork = google_compute_subnetwork.subnet.id
-    access_config {}  # Asigna IP externa si es necesario
+    access_config {}
   }
 }
 
 resource "google_compute_instance_group_manager" "python_miners" {
   name               = "python-miners-mig"
-  zone               = var.zone                  
+  zone               = var.zone
   version {
     instance_template = google_compute_instance_template.python_miner.self_link
   }
@@ -250,61 +291,97 @@ resource "google_compute_instance_group_manager" "python_miners" {
   target_size        = var.worker_min_nodes
 }
 
-resource "google_compute_autoscaler" "python_miners_autoscaler" {
-  name   = "python-miners-autoscaler"
-  zone   = var.zone                         
-  target = google_compute_instance_group_manager.python_miners.id
+# --- FIREWALL ---
 
-  autoscaling_policy {
-    min_replicas     = var.worker_min_nodes     # 0
-    max_replicas     = var.worker_max_nodes     # 5
-    cooldown_period  = 30                       
-
-  }
-}
-
-resource "google_service_account_iam_member" "allow_k8s_to_impersonate" {
-  service_account_id = google_service_account.python_miner.name  # tu python_miner-sa@
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[infra/blockchain-sa]"
-}
-
-# Reglas de Firewall
 resource "google_compute_firewall" "allow-ssh" {
   name    = "allow-ssh"
   network = google_compute_network.vpc.name
-
   allow {
     protocol = "tcp"
     ports    = ["22"]
   }
-
   source_ranges = ["0.0.0.0/0"]
 }
 
 resource "google_compute_firewall" "allow-http" {
   name    = "allow-http"
   network = google_compute_network.vpc.name
-
   allow {
     protocol = "tcp"
     ports    = ["80"]
   }
-
   source_ranges = ["0.0.0.0/0"]
 }
 
 resource "google_compute_firewall" "allow-https" {
   name    = "allow-https"
   network = google_compute_network.vpc.name
-
   allow {
     protocol = "tcp"
     ports    = ["443"]
   }
-
   source_ranges = ["0.0.0.0/0"]
 }
+
+resource "google_compute_firewall" "allow-rabbitmq1" {
+  name    = "allow-rabbitmq1"
+  network = google_compute_network.vpc.name
+  allow {
+    protocol = "tcp"
+    ports    = ["5672", "15672"]
+  }
+  source_ranges = ["0.0.0.0/0"]
+}
+
+resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
+  name    = "allow-rabbit-from-miners-to-ilb"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5672", "15672"]
+  }
+
+  source_tags        = ["python-miner"] 
+  destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
+}
+
+resource "google_compute_firewall" "allow-nodepool-from-miners-to-ilb" {
+  name    = "allow-nodepool-from-miners-to-ilb"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["8081"]
+  }
+
+  source_tags        = ["python-miner"] 
+  destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
+}
+
+resource "google_compute_firewall" "allow-gke-ingress-internal" {
+  name    = "allow-gke-ingress-internal"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5672", "15672"]
+  }
+
+  source_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
+}
+
+resource "google_compute_firewall" "allow-redis" {
+  name    = "allow-redis"
+  network = google_compute_network.vpc.name
+  allow {
+    protocol = "tcp"
+    ports    = ["6379", "8001"]
+  }
+  source_ranges = ["0.0.0.0/0"]
+}
+
+# --- OTROS RECURSOS ---
 
 resource "tls_private_key" "ssh_key" {
   algorithm = "RSA"
@@ -317,26 +394,61 @@ resource "local_file" "ssh_private_key_pem" {
   file_permission = "0600"
 }
 
-resource "google_compute_firewall" "allow-rabbitmq1" {
-  name    = "allow-rabbitmq1"
-  network = google_compute_network.vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["5672", "15672"]
+resource "google_dns_managed_zone" "internal" {
+  name        = "internal-zone"
+  dns_name    = "internal."
+  visibility  = "private"
+  private_visibility_config {
+    networks {
+      network_url = google_compute_network.vpc.self_link
+    }
   }
-
-  source_ranges = ["0.0.0.0/0"]
 }
 
-resource "google_compute_firewall" "allow-redis" {
-  name    = "allow-redis"
+resource "google_compute_address" "rabbitmq_internal_ip" {
+  name         = "rabbitmq-internal-ip"
+  region       = var.region
+  subnetwork   = google_compute_subnetwork.subnet.id
+  address_type = "INTERNAL"
+  address      = "10.0.0.10"
+}
+
+resource "google_dns_record_set" "rabbitmq" {
+  name         = "rabbitmq.internal."
+  managed_zone = google_dns_managed_zone.internal.name
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_address.rabbitmq_internal_ip.address]
+
+  depends_on = [ google_compute_address.rabbitmq_internal_ip ]
+}
+
+resource "google_compute_address" "nodepool_internal_ip" {
+  name         = "nodepool-internal-ip"
+  region       = var.region
+  subnetwork   = google_compute_subnetwork.subnet.id
+  address_type = "INTERNAL"
+  address      = "10.0.0.11"
+}
+
+resource "google_dns_record_set" "nodepool" {
+  name         = "nodepool.internal."
+  managed_zone = google_dns_managed_zone.internal.name
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_address.nodepool_internal_ip.address]
+
+  depends_on = [ google_compute_address.nodepool_internal_ip ]
+}
+
+resource "google_compute_firewall" "allow-nodepool-ilb" {
+  name    = "allow-nodepool-ilb"
   network = google_compute_network.vpc.name
 
   allow {
     protocol = "tcp"
-    ports    = ["6379", "8001"]
+    ports    = ["8081"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }

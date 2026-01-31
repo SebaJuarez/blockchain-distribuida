@@ -1,12 +1,12 @@
 # GCP
-project_id       = "gentle-oxygen-457917-c0"
+project_id       = "majestic-stage-484717-f5"
 credentials_file = "terraform-sa-key.json"
 
 # Bucket para fragmentos de imagen
 # bucket_name      = "bucket-imagenes-sobel"
 
 # Backend
-bucket_backend   = "bucket-backend-sobel"
+bucket_backend   = "bucket-backend-blockchain"
 backend_prefix   = "terraform/tfstate"
 
 # VPC / Subnet donde corre el cluster y las VMs
