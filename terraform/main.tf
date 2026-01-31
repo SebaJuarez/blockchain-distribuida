@@ -346,6 +346,19 @@ resource "google_compute_firewall" "allow-rabbit-from-miners-to-ilb" {
   destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
 
+resource "google_compute_firewall" "allow-nodepool-from-miners-to-ilb" {
+  name    = "allow-nodepool-from-miners-to-ilb"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["8081"]
+  }
+
+  source_tags        = ["python-miner"] 
+  destination_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
+}
+
 resource "google_compute_firewall" "allow-gke-ingress-internal" {
   name    = "allow-gke-ingress-internal"
   network = google_compute_network.vpc.name
@@ -408,4 +421,34 @@ resource "google_dns_record_set" "rabbitmq" {
   rrdatas      = [google_compute_address.rabbitmq_internal_ip.address]
 
   depends_on = [ google_compute_address.rabbitmq_internal_ip ]
+}
+
+resource "google_compute_address" "nodepool_internal_ip" {
+  name         = "nodepool-internal-ip"
+  region       = var.region
+  subnetwork   = google_compute_subnetwork.subnet.id
+  address_type = "INTERNAL"
+  address      = "10.0.0.11"
+}
+
+resource "google_dns_record_set" "nodepool" {
+  name         = "nodepool.internal."
+  managed_zone = google_dns_managed_zone.internal.name
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_address.nodepool_internal_ip.address]
+
+  depends_on = [ google_compute_address.nodepool_internal_ip ]
+}
+
+resource "google_compute_firewall" "allow-nodepool-ilb" {
+  name    = "allow-nodepool-ilb"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["8081"]
+  }
+
+  source_ranges = [google_compute_subnetwork.subnet.ip_cidr_range]
 }
