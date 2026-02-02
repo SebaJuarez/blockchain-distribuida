@@ -17,7 +17,7 @@ public class GcpMinerScalerServiceImpl implements MinerScalerService {
 
     private static final Logger logger = LoggerFactory.getLogger(GcpMinerScalerServiceImpl.class);
 
-    private Compute compute;
+    private final Compute compute;
     @Value("${gcp.compute.mig-name}")
     private String migName;
     @Value("${gcp.project-id}")
