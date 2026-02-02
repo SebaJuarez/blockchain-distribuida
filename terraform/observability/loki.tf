@@ -11,5 +11,5 @@ resource "helm_release" "loki" {
   ]
 
   timeout = 1200
-  wait    = true
+  wait    = false
 }
