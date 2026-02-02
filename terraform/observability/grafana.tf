@@ -31,5 +31,8 @@ resource "kubernetes_service_v1" "grafana_lb" {
     }
   }
 
-  depends_on = [helm_release.grafana]
+  depends_on = [
+    helm_release.prometheus,
+    helm_release.loki
+  ]
 }

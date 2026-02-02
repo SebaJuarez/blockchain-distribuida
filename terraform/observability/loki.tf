@@ -5,7 +5,9 @@ resource "helm_release" "loki" {
   namespace  = kubernetes_namespace_v1.observability.metadata[0].name
 
   values = [
-    file("${path.module}/../values/loki-values.yaml")
+    templatefile("${path.module}/../values/loki-values.yaml", {
+      bucket_name = google_storage_bucket.loki_bucket.name
+    })
   ]
 
   timeout = 1200
