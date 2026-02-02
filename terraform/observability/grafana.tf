@@ -2,7 +2,7 @@ resource "helm_release" "grafana" {
   name       = "grafana"
   repository = "https://grafana.github.io/helm-charts"
   chart      = "grafana"
-  namespace  = kubernetes_namespace.observability.metadata[0].name
+  namespace  = kubernetes_namespace_v1.observability.metadata[0].name
 
   values = [
     file("${path.module}/../values/grafana-values.yaml")
@@ -13,7 +13,7 @@ resource "helm_release" "grafana" {
 resource "kubernetes_service" "grafana_lb" {
   metadata {
     name      = "grafana-lb"
-    namespace = kubernetes_namespace.observability.metadata[0].name
+    namespace  = kubernetes_namespace_v1.observability.metadata[0].name
   }
 
   spec {
