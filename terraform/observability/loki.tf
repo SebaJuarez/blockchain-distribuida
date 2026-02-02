@@ -10,6 +10,4 @@ resource "helm_release" "loki" {
 
   timeout = 1200
   wait    = true
-
-  depends_on = [ helm_release.prometheus ]
 }
