@@ -3,7 +3,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <springProperty scope="context" name="nombreApp" source="spring.application.name" defaultValue="java-app"/>
-    <springProperty scope="context" name="entornoApp" source="spring.aplication.profile" defaultValue="dev"/>
+    <springProperty scope="context" name="entornoApp" source="spring.profiles.active" defaultValue="local"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
