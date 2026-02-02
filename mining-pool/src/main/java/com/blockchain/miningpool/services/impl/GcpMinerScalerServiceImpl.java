@@ -17,13 +17,13 @@ public class GcpMinerScalerServiceImpl implements MinerScalerService {
 
     private static final Logger logger = LoggerFactory.getLogger(GcpMinerScalerServiceImpl.class);
 
-    private final Compute compute;
+    private Compute compute;
     @Value("${gcp.compute.mig-name}")
-    private final String migName;
+    private String migName;
     @Value("${gcp.project-id}")
-    private final String projectId;
+    private String projectId;
     @Value("${gcp.compute.zone}")
-    private final String zone;
+    private String zone;
 
     @Override
     public void resize(int targetSize) {
