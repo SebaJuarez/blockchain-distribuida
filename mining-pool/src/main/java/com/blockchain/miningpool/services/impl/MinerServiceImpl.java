@@ -85,6 +85,7 @@ public class MinerServiceImpl implements MinerService {
 
         // 4) Ajustar tamaño del MIG y actualizar flag
         minerScaler.resize(targetSize);
+        lastTargetSize = targetSize;
     }
 
     @Override
