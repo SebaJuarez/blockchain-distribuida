@@ -1,5 +1,5 @@
 resource "helm_release" "prometheus" {
-  name       = "kube-prometheus"
+  name       = "prometheus-v2"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
   namespace  = kubernetes_namespace_v1.observability.metadata[0].name
@@ -10,6 +10,9 @@ resource "helm_release" "prometheus" {
   wait_for_jobs = true
   timeout       = 900 
   atomic        = false
+
+  cleanup_on_fail = true
+  force_update    = true
 
   values = [
     <<-EOT
@@ -30,7 +33,7 @@ resource "helm_release" "prometheus" {
     prometheus:
       prometheusSpec:
         serviceMonitorSelectorNilUsesHelmValues: false
-        ignoreNamespaceSelectors: true 
+        ignoreNamespaceSelectors: true
     EOT
   ]
 }
