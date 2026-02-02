@@ -7,9 +7,11 @@ resource "helm_release" "grafana" {
   values = [
     file("${path.module}/../values/grafana-values.yaml")
   ]
+
+  timeout = 600
+
 }
 
-# Exponer Grafana hacia afuera del cluster
 resource "kubernetes_service" "grafana_lb" {
   metadata {
     name      = "grafana-lb"
