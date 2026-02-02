@@ -1,10 +1,13 @@
 loki:
   auth_enabled: false
-
-storage:
-  type: gcs
-  gcs:
-    bucket_name: "loki-logs-REPLACE_ME"
+  storage:
+    type: gcs
+    bucketNames:
+      chunks: "${bucket_name}"
+      ruler:  "${bucket_name}"
+      admin:  "${bucket_name}"
+    gcs:
+      bucket_name: "${bucket_name}"
 
 singleBinary:
   replicas: 1
