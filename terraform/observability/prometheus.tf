@@ -16,15 +16,21 @@ resource "helm_release" "prometheus" {
     grafana:
       enabled: false
 
+    defaultRules:
+      enabled: false 
+
     prometheusOperator:
       admissionWebhooks:
         enabled: false
         patch:
-          enabled: false # Esto quita los errores de "failed calling webhook"
-    
+          enabled: false
+      tls:
+        enabled: false
+                    
     prometheus:
       prometheusSpec:
         serviceMonitorSelectorNilUsesHelmValues: false
+        ignoreNamespaceSelectors: true 
     EOT
   ]
 }
