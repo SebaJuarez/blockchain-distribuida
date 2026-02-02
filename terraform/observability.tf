@@ -6,7 +6,3 @@ module "observability" {
   project_id = var.project_id
   region     = var.region
 }
-
-resource "null_resource" "wait_observability_dep" {
-  depends_on = [ google_container_cluster.primary, module.observability ]
-}
