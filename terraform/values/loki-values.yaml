@@ -1,11 +1,13 @@
 loki:
   auth_enabled: false
 
+storage:
+  type: gcs
+  gcs:
+    bucket_name: "loki-logs-REPLACE_ME"
+
 singleBinary:
   replicas: 1
   persistence:
     enabled: true
     size: 5Gi
-
-storage:
-  type: filesystem
