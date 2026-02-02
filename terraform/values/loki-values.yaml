@@ -1,15 +1,11 @@
-deploymentMode: SingleBinary
-
 loki:
   auth_enabled: false
 
 singleBinary:
   replicas: 1
   persistence:
-    storageClass: standard
-    accessModes:
-      - ReadWriteOnce
+    enabled: true
     size: 5Gi
 
-serviceMonitor:
-  enabled: true
+storage:
+  type: filesystem
