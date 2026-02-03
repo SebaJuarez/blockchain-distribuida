@@ -3,9 +3,10 @@ kind: Service
 metadata:
   name: node-pool
   namespace: apps
+  labels:
+    prometheus-monitored: "true"
 spec:
   type: LoadBalancer
-
   selector:
     app: node-pool
   ports:
