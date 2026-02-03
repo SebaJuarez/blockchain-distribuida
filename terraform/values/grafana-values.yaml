@@ -6,12 +6,12 @@ datasources:
     datasources:
       - name: Prometheus
         type: prometheus
-        url: http://prometheus-v2-prometheus.observability.svc.cluster.local:9090
+        url: http://prometheus-v2-kube-prometh-prometheus.observability.svc.cluster.local:9090
         access: proxy
         isDefault: true
       - name: Loki
         type: loki
-        url: http://loki-v2.observability.svc.cluster.local:3100
+        url: http://loki-v2-gateway.observability.svc.cluster.local
         access: proxy
 
 dashboardProviders:
