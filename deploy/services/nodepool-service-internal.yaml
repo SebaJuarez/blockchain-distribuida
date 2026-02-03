@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: nodepool-internal
   namespace: apps
+  labels:
+    prometheus-monitored: "true"
   annotations:
     networking.gke.io/load-balancer-type: "Internal"
     networking.gke.io/internal-load-balancer-allow-global-access: "true"

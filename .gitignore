@@ -1,7 +1,8 @@
 /terraform
-
 !/terraform/main.tf
 !/terraform/terraform.tfvars
+!/terraform/observability/*
+!/terraform/observability.tf
 
 /deploy/secrets
 !/deploy/secrets/*.example
