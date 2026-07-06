@@ -20,13 +20,16 @@ public class MiningTaskNotifier {
     
     private final AmqpTemplate rabbitTemplate;
     private final MessageConverter jsonMessageConverter;
+    private final CoordinatorMetrics metrics;
 
-    public MiningTaskNotifier(AmqpTemplate rabbitTemplate, MessageConverter jsonMessageConverter) {
+    public MiningTaskNotifier(AmqpTemplate rabbitTemplate, MessageConverter jsonMessageConverter, CoordinatorMetrics metrics) {
         this.rabbitTemplate = rabbitTemplate;
         this.jsonMessageConverter = jsonMessageConverter;
+        this.metrics = metrics;
     }
 
     public void notifyNewMiningTask(Block blockCandidate, String hashChallenge, int retries) {
+        long startTime = System.currentTimeMillis();
         if (blockCandidate == null) {
             logger.error("Error al notificar la tarea, el bloque candidato es nulo.");
             return;
@@ -52,6 +55,10 @@ public class MiningTaskNotifier {
                 "MiningTaskNotifier: Tarea de minería publicada para el bloque con index: " + blockCandidate.getIndex() +
                         " (hash ID: " + blockCandidate.getHash() + ", reintentos: " + retries + ", challenge: " + hashChallenge+ " ) al exchange '" + RabbitMQConfig.BLOCKCHAIN_EXCHANGE + "'."
         );
+        
+        // Record metrics
+        metrics.incrementCandidateBlocksPublished();
+        metrics.recordBlockValidationTime(System.currentTimeMillis() - startTime);
     }
 
     public void notifySolvedCandidateBlock(String preliminaryHash, String minerId) {
@@ -67,6 +74,9 @@ public class MiningTaskNotifier {
         Message message = jsonMessageConverter.toMessage(solvedTaskStatus, properties);
         rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
         logger.debug("MiningTaskNotifier: Notificado que el bloque: " + preliminaryHash + " fue resuelto por " + minerId + ". Evento RESOLVED_CANDIDATE_BLOCK publicado.");
+        
+        // Record metrics
+        metrics.incrementMinerResponses("accepted");
     }
 
     public void notifyMiningTaskDropped(String preliminaryHash) {

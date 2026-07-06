@@ -28,16 +28,19 @@ public class TransactionPoolService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final CoordinatorMetrics metrics;
 
-    public TransactionPoolService(RedisTemplate<String, String> redisTemplate) {
+    public TransactionPoolService(RedisTemplate<String, String> redisTemplate, CoordinatorMetrics metrics) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = new ObjectMapper();
+        this.metrics = metrics;
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
      // Agrega una nueva transacción al pool de transacciones pendientes en memoria y la almacena en Redis.
     public void addTransaction(Transaction transaction) {
+        long startTime = System.currentTimeMillis();
         pendingTransactions.offer(transaction); // Añade al final de la cola en memoria
         logger.debug("Transaction añadida al pool (en memoria): " + transaction.getId());
 
@@ -61,6 +64,11 @@ public class TransactionPoolService {
                 logger.error("Error al guardar la transaccion formateada a JSON string: " + jsonE.getMessage(), jsonE);
             }
         }
+        
+        // Update metrics
+        metrics.incrementTransactionsReceived();
+        metrics.updatePendingTransactions(pendingTransactions.size());
+        metrics.recordTransactionValidationTime(System.currentTimeMillis() - startTime);
     }
     
     // Obtiene un número específico de transacciones pendientes del pool en memoria.
@@ -75,12 +83,17 @@ public class TransactionPoolService {
         for (int i = 0; i < count && !pendingTransactions.isEmpty(); i++) {
             transactionsToProcess.add(pendingTransactions.poll()); // Elimina y devuelve el elemento principal de la cola
         }
+        
+        // Update metrics
+        metrics.updatePendingTransactions(pendingTransactions.size());
         return transactionsToProcess;
     }
 
     // Obtiene el número actual de transacciones pendientes en el pool en memoria.
     public int getPendingTransactionCount() {
-        return pendingTransactions.size();
+        int count = pendingTransactions.size();
+        metrics.updatePendingTransactions(count);
+        return count;
     }
 
     // obtiene una copia de todas las transacciones pendientes sin eliminarlas del pool.

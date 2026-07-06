@@ -12,6 +12,7 @@ public class DifficultyService {
     private static final Logger logger = LoggerFactory.getLogger(DifficultyService.class);
     
     private final RedisTemplate<String, String> redisTemplate;
+    private final CoordinatorMetrics metrics;
 
     private static final String CURRENT_SYSTEM_CHALLENGE_KEY = "current_system_challenge";
     private final String defaultHashChallenge;
@@ -20,9 +21,11 @@ public class DifficultyService {
 
     public DifficultyService(
             RedisTemplate<String, String> redisTemplate,
-            @Value("${blockchain.mining.default-hash-challenge}") String defaultHashChallenge) {
+            @Value("${blockchain.mining.default-hash-challenge}") String defaultHashChallenge,
+            CoordinatorMetrics metrics) {
         this.redisTemplate = redisTemplate;
         this.defaultHashChallenge = defaultHashChallenge;
+        this.metrics = metrics;
     }
 
     public void loadCurrentSystemChallenge() {
@@ -30,16 +33,19 @@ public class DifficultyService {
         if (loadedChallenge != null && !loadedChallenge.isEmpty()) {
             this.currentSystemChallenge = loadedChallenge;
             logger.info("DifficultyService: Dificultad del sistema cargada desde Redis: " + currentSystemChallenge);
+            metrics.updateDifficulty(currentSystemChallenge);
         } else {
             this.currentSystemChallenge = defaultHashChallenge;
             saveCurrentSystemChallenge();
             logger.info("DifficultyService: No se encontró dificultad del sistema en Redis. Usando por defecto: " + defaultHashChallenge);
+            metrics.updateDifficulty(defaultHashChallenge);
         }
     }
 
     private void saveCurrentSystemChallenge() {
         redisTemplate.opsForValue().set(CURRENT_SYSTEM_CHALLENGE_KEY, this.currentSystemChallenge);
         logger.info("DifficultyService: Dificultad del sistema guardada en Redis: " + this.currentSystemChallenge);
+        metrics.updateDifficulty(currentSystemChallenge);
     }
 
     public void setCurrentChallenge(String newChallenge) {

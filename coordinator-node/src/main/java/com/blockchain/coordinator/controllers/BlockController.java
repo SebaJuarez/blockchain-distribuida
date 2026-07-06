@@ -31,6 +31,7 @@ public class BlockController {
     private final QueueAdminService queueAdminService;
     private final CurrentMiningTaskService currentMiningTaskService;
     private final MiningTaskNotifier miningTaskNotifier;
+    private final CoordinatorMetrics metrics;
 
     @GetMapping("/status")
     public ResponseEntity<EntityModel<StatusResponse>> getStatus() {
@@ -102,9 +103,11 @@ public class BlockController {
             queueAdminService.purgeBlocksQueue();
             miningTaskNotifier.notifySolvedCandidateBlock(candidateBlock.getBlockId(), candidateBlock.getMinerId());
             currentMiningTaskService.clearCurrentTask();
+            metrics.incrementMinerResponses("accepted");
             return ResponseEntity.ok("Solución valida, Bloque añadido a la blockchain.");
         } else {
             logger.warn("Fallo la validacion o ya fue resuelto el bloque: {}", candidateBlock.getBlockId());
+            metrics.incrementMinerResponses("rejected");
             return ResponseEntity.badRequest().body("Falló la validación o el bloque ya fue resuelto por otro minero.");
         }
     }

@@ -9,6 +9,7 @@ import com.blockchain.coordinator.services.DifficultyService;
 import com.blockchain.coordinator.services.MiningTaskNotifier;
 import com.blockchain.coordinator.services.QueueAdminService;
 import com.blockchain.coordinator.services.TransactionPoolService;
+import com.blockchain.coordinator.services.CoordinatorMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,6 +29,7 @@ public class TaskScheduler {
     private final QueueAdminService queueAdminService;
     private final TransactionPoolService transactionPoolService;
     private final DifficultyService difficultyService;
+    private final CoordinatorMetrics metrics;
 
     @Value("${blockchain.mining.max-transactions-per-block}")
     private int maxTransactionsPerBlock;
@@ -51,6 +53,7 @@ public class TaskScheduler {
                 queueAdminService.purgeBlocksQueue();
             } else {
                 currentMiningTaskService.incrementCurrentTaskRetries();
+                metrics.incrementPublishRetries();
                 logger.info("Scheduler: Tarea de minería ({}) persistente, reintentos: {}.", prevTask.getBlock().getHash(), prevTask.getRetries());
                 return;
             }
