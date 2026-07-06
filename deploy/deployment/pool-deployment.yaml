@@ -20,7 +20,7 @@ spec:
       serviceAccountName: blockchain-sa
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:10d1c93
+          image: sebajuarez/minerpool:0da9cdc
           ports:
             - containerPort: 8081
           envFrom:
