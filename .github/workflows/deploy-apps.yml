@@ -29,8 +29,8 @@ jobs:
 
       - name: Crear Kubernetes Secrets
         run: |
-          echo "${{ secrets.POOL_SECRET_YAML }}" | kubectl apply -f -
-          echo "${{ secrets.COORDINADOR_SECRET_YAML }}" | kubectl apply -f -
+          printf '%s' '${{ secrets.POOL_SECRET_YAML }}' | kubectl apply -f -
+          printf '%s' '${{ secrets.COORDINADOR_SECRET_YAML }}' | kubectl apply -f -
 
       - name: Aplicar manifests
         run: |
