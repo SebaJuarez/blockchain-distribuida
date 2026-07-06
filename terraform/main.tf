@@ -1,11 +1,18 @@
 terraform {
   required_version = ">= 0.13"
+
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 5.0, < 7.0" 
+      version = ">= 5.0, < 7.0"
+    }
+
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.11"
     }
   }
+
   backend "gcs" {
     bucket = var.bucket_backend
     prefix = var.backend_prefix
@@ -154,12 +161,24 @@ resource "google_project_iam_member" "python_miner_roles" {
 
 # Workload Identity (Permisos para que K8s use la cuenta de Google)
 resource "google_service_account_iam_member" "allow_k8s_infra_impersonate" {
+
+  depends_on = [
+    time_sleep.wait_for_workload_identity,
+    google_container_node_pool.infra
+  ]
+
   service_account_id = google_service_account.python_miner.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[infra/blockchain-sa]"
 }
 
 resource "google_service_account_iam_member" "allow_k8s_apps_impersonate" {
+
+  depends_on = [
+    time_sleep.wait_for_workload_identity,
+    google_container_node_pool.apps
+  ]
+
   service_account_id = google_service_account.python_miner.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[apps/blockchain-sa]"
@@ -382,6 +401,14 @@ resource "google_compute_firewall" "allow-redis" {
 }
 
 # --- OTROS RECURSOS ---
+
+resource "time_sleep" "wait_for_workload_identity" {
+  depends_on = [
+    google_container_cluster.primary
+  ]
+
+  create_duration = "90s"
+}
 
 resource "tls_private_key" "ssh_key" {
   algorithm = "RSA"
