@@ -1,9 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: infra
 spec:
+  serviceName: "redis"
   replicas: 1
   selector:
     matchLabels:
@@ -13,8 +14,26 @@ spec:
       labels:
         app: redis
     spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 999:999 /data"]
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
       containers:
         - name: redis
           image: redis:alpine
           ports:
             - containerPort: 6379
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi

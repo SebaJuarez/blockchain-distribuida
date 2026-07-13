@@ -1,9 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rabbitmq
   namespace: infra
 spec:
+  serviceName: "rabbitmq-internal"
   replicas: 1
   selector:
     matchLabels:
@@ -17,5 +18,18 @@ spec:
         - name: rabbitmq
           image: rabbitmq:3-management
           ports:
-            - containerPort: 5672   # puerto de RabbitMQ
-            - containerPort: 15672  # puerto para la UI web
+            - containerPort: 5672
+            - containerPort: 15672
+          # Montamos el disco persistente
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+  # Solicitamos el PVC a GKE
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
