@@ -10,6 +10,7 @@ metadata:
     networking.gke.io/internal-load-balancer-allow-global-access: "true"
 spec:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   loadBalancerIP: 10.0.0.11
   selector:
     app: node-pool
