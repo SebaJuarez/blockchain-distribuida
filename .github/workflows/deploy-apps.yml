@@ -9,7 +9,7 @@ jobs:
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-      GKE_CLUSTER_LOCATION: ${{ secrets.GKE_CLUSTER_LOCATION }}  # zone o region
+      GKE_CLUSTER_LOCATION: ${{ secrets.GKE_CLUSTER_LOCATION }}
       GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
     steps:
       - name: Checkout repo
@@ -37,4 +37,5 @@ jobs:
           kubectl apply -f deploy/serviceAccount/
           kubectl apply -f deploy/configMaps/
           kubectl apply -f deploy/services/
+          kubectl apply -f deploy/services/monitoring/
           kubectl apply -f deploy/deployment/
