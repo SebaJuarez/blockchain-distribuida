@@ -11,18 +11,38 @@ spec:
     matchLabels:
       app: node-pool
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: node-pool
     spec:
       serviceAccountName: blockchain-sa
+      # --- SEGMENTACIÓN ---
+      nodeSelector:
+        role: "app"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      # --------------------------------
       containers:
         - name: node-pool
           image: sebajuarez/minerpool:a720ca6
           ports:
             - containerPort: 8081
+          # --- LÍMITES DE RECURSOS ---
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # ---------------------------
           envFrom:
             - configMapRef:
                 name: pool-config

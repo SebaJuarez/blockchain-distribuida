@@ -14,6 +14,14 @@ spec:
       labels:
         app: redis
     spec:
+      # --- SEGMENTACIÓN ---
+      nodeSelector:
+        role: "infra"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      # --------------------------------
       initContainers:
         - name: fix-permissions
           image: busybox
@@ -26,6 +34,15 @@ spec:
           image: redis:alpine
           ports:
             - containerPort: 6379
+          # --- LÍMITES DE RECURSOS ---
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          # ---------------------------
           volumeMounts:
             - name: redis-data
               mountPath: /data
