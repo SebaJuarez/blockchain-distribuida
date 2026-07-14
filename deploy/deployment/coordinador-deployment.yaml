@@ -17,6 +17,7 @@ spec:
       labels:
         app: nodo-coordinador
     spec:
+      serviceAccountName: blockchain-sa
       # --- SEGMENTACIÓN ---
       nodeSelector:
         role: "app"
