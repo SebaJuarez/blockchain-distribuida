@@ -24,5 +24,7 @@ spec:
           ports:
             - containerPort: 8081
           envFrom:
+            - configMapRef:
+                name: pool-config
             - secretRef:
                 name: pool-secrets

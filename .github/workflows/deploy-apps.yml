@@ -35,6 +35,6 @@ jobs:
       - name: Aplicar manifests
         run: |
           kubectl apply -f deploy/serviceAccount/
+          kubectl apply -f deploy/configMaps/
           kubectl apply -f deploy/services/
           kubectl apply -f deploy/deployment/
-        

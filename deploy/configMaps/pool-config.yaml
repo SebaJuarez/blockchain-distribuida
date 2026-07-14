@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pool-config
+  namespace: apps
+data:
+  SERVER_PORT: "8081"
+  SPRING_PROFILES_ACTIVE: "gcp"
+  SPRING_REDIS_HOST: "redis.infra"
+  SPRING_REDIS_PORT: "6379"
+  SPRING_RABBIT_HOST: "rabbitmq.infra"
+  SPRING_RABBIT_PORT: "5672"
+  MINER_STATUS_CHECK_INTERVAL: "15000"
+  FEIGN_CONNECT_TIMEOUT: "5000"
+  FEIGN_READ_TIMEOUT: "30000"
+  METADATA_COORDINATOR_URL: "http://nodo-coordinador:8080"
+  GCP_PROJECT_ID: "sdypp-final-501419"
+  GCP_COMPUTE_ZONE: "us-central1-a"
+  GCP_COMPUTE_MIG_NAME: "python-miners-mig"

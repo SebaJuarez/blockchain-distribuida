@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coordinador-config
+  namespace: apps
+data:
+  PORT: "8080"
+  SPRING_PROFILES_ACTIVE: "gcp"
+  SPRING_RABBITMQ_HOST: "rabbitmq.infra"
+  SPRING_RABBITMQ_PORT: "5672"
+  SPRING_DATA_REDIS_HOST: "redis.infra"
+  SPRING_DATA_REDIS_PORT: "6379"
+  BLOCKCHAIN_MINING_HASH_CHALLENGE: "0000"
+  BLOCKCHAIN_MINING_TRANSACTIONS_PER_BLOCK: "5"
+  BLOCKCHAIN_MINING_TASK_PUBLICATION_CRON: "0 */1 * * * *"
