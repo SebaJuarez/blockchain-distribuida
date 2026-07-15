@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -22,14 +23,56 @@ public class PendingMiningResultServiceImpl
     @Override
     public void save(MiningResult miningResult) {
 
+        String resultKey =
+                miningResult.getBlockId()
+                        + "-"
+                        + miningResult.getNonce()
+                        + "-"
+                        + miningResult.getMinerId();
+
+        Optional<PendingMiningResult> existing =
+                repository.findByResultKey(resultKey);
+
+        if (existing.isPresent()) {
+
+            PendingMiningResult pending = existing.get();
+
+            pending.setAttempts(
+                    pending.getAttempts() + 1);
+
+            pending.setLastAttempt(
+                    Instant.now());
+
+            pending.setNextRetryAt(
+                    calculateNextRetry(
+                            pending.getAttempts()));
+
+            repository.save(pending);
+
+            return;
+        }
+
         PendingMiningResult pending =
                 PendingMiningResult.builder()
+
                         .id(UUID.randomUUID())
-                        .candidateHash(miningResult.getBlockId())
+
+                        .candidateHash(
+                                miningResult.getBlockId())
+
+                        .resultKey(resultKey)
+
                         .miningResult(miningResult)
-                        .attempts(0)
+
+                        .attempts(1)
+
                         .createdAt(Instant.now())
-                        .lastAttempt(null)
+
+                        .lastAttempt(Instant.now())
+
+                        .nextRetryAt(
+                                calculateNextRetry(1))
+
                         .build();
 
         repository.save(pending);
@@ -56,5 +99,25 @@ public class PendingMiningResultServiceImpl
         repository.findByCandidateHash(candidateHash)
                 .forEach(repository::delete);
 
+    }
+
+    private Instant calculateNextRetry(int attempts) {
+
+        long seconds =
+                Math.min(100,
+                        (long) Math.pow(2, attempts) * 30);
+
+        return Instant.now()
+                .plusSeconds(seconds);
+    }
+
+    @Override
+    public void registerFailedAttempt(UUID id) {
+        repository.findById(id).ifPresent(p -> {
+            p.setAttempts(p.getAttempts() + 1);
+            p.setLastAttempt(Instant.now());
+            p.setNextRetryAt(calculateNextRetry(p.getAttempts()));
+            repository.save(p);
+        });
     }
 }

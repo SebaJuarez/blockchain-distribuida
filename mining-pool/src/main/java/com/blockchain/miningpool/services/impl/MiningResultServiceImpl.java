@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -23,13 +24,14 @@ public class MiningResultServiceImpl implements MiningResultService {
     @Override
     public boolean isValidMiningResult(MiningResult miningResult) {
 
-        if (miningResult.getHash().isEmpty() ||
-                miningResult.getPrevious_hash().isEmpty() ||
+        if (!StringUtils.hasText(miningResult.getHash()) ||
+                !StringUtils.hasText(miningResult.getPrevious_hash()) ||
+                !StringUtils.hasText(miningResult.getBlockId()) ||
+                miningResult.getData() == null ||
                 miningResult.getData().isEmpty() ||
                 miningResult.getIndex() < 0 ||
                 miningResult.getNonce() < 0 ||
-                miningResult.getTimestamp() < 0 ||
-                miningResult.getBlockId().isEmpty()) {
+                miningResult.getTimestamp() < 0) {
             return false;
         }
 

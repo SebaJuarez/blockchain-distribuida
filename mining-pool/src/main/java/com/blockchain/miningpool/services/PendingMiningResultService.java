@@ -16,4 +16,6 @@ public interface PendingMiningResultService {
 
     void deleteByCandidate(String candidateHash);
 
+    void registerFailedAttempt(UUID id);
+
 }
