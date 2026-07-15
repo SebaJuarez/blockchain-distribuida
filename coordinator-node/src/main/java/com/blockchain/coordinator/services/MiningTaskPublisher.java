@@ -1,8 +1,8 @@
 package com.blockchain.coordinator.services;
 
 import com.blockchain.coordinator.config.RabbitMQConfig;
-import com.blockchain.coordinator.dtos.MiningTaskStatus;
 import com.blockchain.coordinator.dtos.MiningTask;
+import com.blockchain.coordinator.dtos.MiningTaskStatus;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.ExchangeEvent;
 import org.slf4j.Logger;
@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 public class MiningTaskPublisher {
 
     private static final Logger logger = LoggerFactory.getLogger(MiningTaskPublisher.class);
-    
     private final AmqpTemplate rabbitTemplate;
     private MiningTask task;
     private final MessageConverter jsonMessageConverter;
@@ -42,24 +41,16 @@ public class MiningTaskPublisher {
         task.setBlock(blockCandidate);
         task.setRetries(0);
         task.setEvent(ExchangeEvent.NEW_CANDIDATE_BLOCK);
+        task.setCreatedAt(System.currentTimeMillis());
 
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryMode(MessageProperties.DEFAULT_DELIVERY_MODE.PERSISTENT);
 
-        org.springframework.amqp.core.Message message =
-                jsonMessageConverter.toMessage(task, properties);
-
-        rabbitTemplate.send(
-                RabbitMQConfig.BLOCKCHAIN_EXCHANGE,
-                "",
-                message
-        );
-        logger.debug(
-                "Se publicó la tarea de minería para el bloque con index: " + blockCandidate.getIndex() +
-                        " (hash ID: " + blockCandidate.getHash() + ") al exchange '" + RabbitMQConfig.BLOCKCHAIN_EXCHANGE + "'."
-        );
+        Message message = jsonMessageConverter.toMessage(task, properties);
+        rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
+        logger.debug("Se publicó la tarea de minería al exchange.");
     }
-  
+
     public MiningTask getCurrentTask() {
         return task;
     }
@@ -71,46 +62,25 @@ public class MiningTaskPublisher {
     }
 
     public void notifySolvedCandidateBlock(Block solvedBlock, String preliminaryHash, String minerId) {
-        if (solvedBlock == null) {
-            logger.error("Error: el bloque resuelto es nulo.");
-            return;
-        }
-
+        if (solvedBlock == null) return;
         try {
             amqpAdmin.purgeQueue(RabbitMQConfig.BLOCKS_QUEUE, false);
-            logger.debug("Se elimino el bloque candidato.");
         } catch (Exception e) {
-            logger.error("Error al eliminar el bloque candidato: " + e.getMessage(), e);
         }
-
-        MiningTaskStatus solvedTask = new MiningTaskStatus(
-                ExchangeEvent.RESOLVED_CANDIDATE_BLOCK,
-                preliminaryHash,
-                minerId
-        );
-
+        MiningTaskStatus solvedTask = new MiningTaskStatus(ExchangeEvent.RESOLVED_CANDIDATE_BLOCK, preliminaryHash, minerId);
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryMode(MessageProperties.DEFAULT_DELIVERY_MODE.PERSISTENT);
-
         Message message = jsonMessageConverter.toMessage(solvedTask, properties);
         rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
-        logger.debug("Se notificó que el bloque: " + preliminaryHash + "  fue resuelto. Evento RESOLVED_CANDIDATE_BLOCK publicado.");
+        logger.debug("Se notificó que el bloque: {}  fue resuelto. Evento RESOLVED_CANDIDATE_BLOCK publicado.", preliminaryHash);
     }
 
-    public void notifyMiningTaskDropped(String preliminaryHash)
-    {
-        MiningTaskStatus solvedTask = new MiningTaskStatus(
-                ExchangeEvent.CANDIDATE_BLOCK_DROPPED,
-                preliminaryHash,
-                ""
-        );
-
+    public void notifyMiningTaskDropped(String preliminaryHash) {
+        MiningTaskStatus solvedTask = new MiningTaskStatus(ExchangeEvent.CANDIDATE_BLOCK_DROPPED, preliminaryHash, "");
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryMode(MessageProperties.DEFAULT_DELIVERY_MODE.PERSISTENT);
-
         Message message = jsonMessageConverter.toMessage(solvedTask, properties);
         rabbitTemplate.send(RabbitMQConfig.BLOCKCHAIN_EXCHANGE, "", message);
-
-        logger.debug("Se notificó que el bloque: " + preliminaryHash + "  fue dropeado. Evento CANDIDATE_BLOCK_DROPPED publicado.");
+        logger.debug("Se notificó que el bloque: {}  fue dropeado. Evento CANDIDATE_BLOCK_DROPPED publicado.", preliminaryHash);
     }
 }

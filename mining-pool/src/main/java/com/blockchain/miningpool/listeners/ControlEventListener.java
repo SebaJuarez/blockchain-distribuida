@@ -9,6 +9,8 @@ import com.blockchain.miningpool.services.PendingMiningResultService;
 import com.blockchain.miningpool.services.QueueAdmin;
 import com.blockchain.miningpool.services.WorkerDispatcher;
 import com.rabbitmq.client.Channel;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +18,8 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.TimeUnit;
 
 @Component
 @RequiredArgsConstructor
@@ -28,30 +32,30 @@ public class ControlEventListener {
     private final RabbitTemplate rabbitTemplate;
     private final QueueAdmin queueAdmin;
     private final PendingMiningResultService pendingMiningResultService;
+    private final MeterRegistry meterRegistry;
 
-    @RabbitListener(
-            queues = RabbitMQConfig.BLOCKS_CONTROL_QUEUE,
-            containerFactory = "rabbitListenerContainerFactory"
-    )
+    @RabbitListener(queues = RabbitMQConfig.BLOCKS_CONTROL_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     public void onControlEvent(Message rawMessage, Channel ch) throws Exception {
         long tag = rawMessage.getMessageProperties().getDeliveryTag();
         Object payload = null;
 
         try {
             payload = rabbitTemplate.getMessageConverter().fromMessage(rawMessage);
-            logger.debug("Recibido evento de control de minería. Payload deserializado: " + payload);
+            logger.info("Recibido evento de control de minería. Payload deserializado: " + payload);
 
             if (payload instanceof MiningTask task && task.getEvent() == ExchangeEvent.NEW_CANDIDATE_BLOCK) {
+
+                Timer.builder("mining.rabbitmq.latency")
+                        .description("Tiempo en transito por RabbitMQ")
+                        .register(meterRegistry)
+                        .record(System.currentTimeMillis() - task.getCreatedAt(), TimeUnit.MILLISECONDS);
+
                 long gpusMinersActive = minerService.getMinersCount();
                 String challenge = task.getChallenge();
-
                 long fullNonceRangeStart = 0;
                 long fullNonceRangeEnd = estimateMaxNonceBasedOnChallenge(challenge);
-
                 int numberOfDivisions = (gpusMinersActive > 0) ? (int) gpusMinersActive : 5;
-
-                logger.info("Dividiendo el rango de nonce entre " + numberOfDivisions + " workers. Rango total: " +
-                        fullNonceRangeStart + " a " + fullNonceRangeEnd);
+                logger.info("Dividiendo el rango de nonce entre {} workers. Rango total: {} a {}", numberOfDivisions, fullNonceRangeStart, fullNonceRangeEnd);
 
                 if (numberOfDivisions < 1) numberOfDivisions = 1;
 
@@ -63,39 +67,26 @@ public class ControlEventListener {
 
                 for (int i = 0; i < numberOfDivisions; i++) {
                     long currentTo = currentFrom + rangeSize - 1;
-                    if (i < remainder) {
-                        currentTo++;
-                    }
-                    if (currentTo > fullNonceRangeEnd) {
-                        currentTo = fullNonceRangeEnd;
-                    }
-
-                    logger.debug("Despachando subtarea #" + (i + 1) + ": nonce de " + currentFrom + " a " + currentTo);
-
-                    dispatcher.dispatchSubTasks(
-                            task.getBlock(),
-                            task.getChallenge(),
-                            currentFrom,
-                            currentTo
-                    );
-
+                    if (i < remainder) currentTo++;
+                    if (currentTo > fullNonceRangeEnd) currentTo = fullNonceRangeEnd;
+                    logger.debug("Despachando subtarea #{}: nonce de {} a {}", i + 1, currentFrom, currentTo);
+                    dispatcher.dispatchSubTasks(task.getBlock(), task.getChallenge(), currentFrom, currentTo);
                     currentFrom = currentTo + 1;
                     if (currentFrom > fullNonceRangeEnd) break;
                 }
 
             } else if (payload instanceof MiningTaskStatus dropped &&
-                    (dropped.getEvent() == ExchangeEvent.CANDIDATE_BLOCK_DROPPED ||
-                            dropped.getEvent() == ExchangeEvent.RESOLVED_CANDIDATE_BLOCK)) {
+                    (dropped.getEvent() == ExchangeEvent.CANDIDATE_BLOCK_DROPPED || dropped.getEvent() == ExchangeEvent.RESOLVED_CANDIDATE_BLOCK)) {
                 dispatcher.broadcastCancel(dropped.getPreliminaryHashBlockResolved());
                 queueAdmin.purgeSubTasksQueue();
                 pendingMiningResultService.deleteByCandidate(dropped.getPreliminaryHashBlockResolved());
             } else {
-                logger.error("Tipo de payload inesperado: " + payload.getClass().getName());
+                logger.error("Tipo de payload inesperado: {}", payload.getClass().getName());
             }
 
             ch.basicAck(tag, false);
         } catch (Exception e) {
-            logger.error("Error procesando evento de control de minería: " + e.getMessage(), e);
+            logger.error("Error procesando evento de control de minería: {}", e.getMessage(), e);
             ch.basicNack(tag, false, false);
             throw e;
         }
@@ -107,7 +98,6 @@ public class ControlEventListener {
             if (c != '0') break;
             zeros++;
         }
-
         return switch (zeros) {
             case 0 -> 100_000L;
             case 1 -> 1_000_000L;
