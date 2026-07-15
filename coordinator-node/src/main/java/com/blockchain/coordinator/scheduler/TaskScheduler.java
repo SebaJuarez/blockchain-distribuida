@@ -3,31 +3,28 @@ package com.blockchain.coordinator.scheduler;
 import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.ExchangeEvent;
-import com.blockchain.coordinator.services.BlockService;
-import com.blockchain.coordinator.services.CurrentMiningTaskService;
-import com.blockchain.coordinator.services.DifficultyService;
-import com.blockchain.coordinator.services.MiningTaskNotifier;
-import com.blockchain.coordinator.services.QueueAdminService;
-import com.blockchain.coordinator.services.TransactionPoolService;
+import com.blockchain.coordinator.services.*;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Component("blockchainTaskScheduler")
 @RequiredArgsConstructor
 public class TaskScheduler {
-    
-    private static final Logger logger = LoggerFactory.getLogger(TaskScheduler.class);
 
+    private static final Logger logger = LoggerFactory.getLogger(TaskScheduler.class);
     private final BlockService blockService;
     private final MiningTaskNotifier miningTaskNotifier;
     private final CurrentMiningTaskService currentMiningTaskService;
     private final QueueAdminService queueAdminService;
     private final TransactionPoolService transactionPoolService;
     private final DifficultyService difficultyService;
+    private final MeterRegistry meterRegistry;
 
     @Value("${blockchain.mining.max-transactions-per-block}")
     private int maxTransactionsPerBlock;
@@ -38,13 +35,13 @@ public class TaskScheduler {
 
     @Scheduled(cron = "${blockchain.mining.task-publication-cron}")
     public void createAndPublishMiningTask() {
-
         MiningTask prevTask = currentMiningTaskService.getCurrentTask();
         boolean coordinatorHasActiveMiningTask = (prevTask != null);
 
         if (coordinatorHasActiveMiningTask) {
             if (prevTask.getRetries() >= maxRetries) {
-                logger.warn("Scheduler: Se superaron {} reintentos para el bloque {}. Descartando candidato.", maxRetries, prevTask.getBlock().getHash());
+                logger.warn("Scheduler: Se superaron reintentos. Descartando candidato.");
+                Counter.builder("mining.blocks.discarded").register(meterRegistry).increment();
                 difficultyService.decrementChallenge();
                 miningTaskNotifier.notifyMiningTaskDropped(prevTask.getBlock().getHash());
                 currentMiningTaskService.clearCurrentTask();
@@ -57,13 +54,12 @@ public class TaskScheduler {
         }
 
         int pending = transactionPoolService.getPendingTransactionCount();
-
         if (pending >= minTransactionsPerBlock) {
             logger.info("Scheduler: No hay tarea activa o la anterior fue descartada. Creando y publicando nuevo bloque candidato (tarea de minería).");
             Block newBlock = blockService.createNewMiningCandidateBlock(maxTransactionsPerBlock);
             if (newBlock != null) {
                 String challengeForNewTask = difficultyService.getCurrentChallenge();
-                MiningTask newTask = new MiningTask(ExchangeEvent.NEW_CANDIDATE_BLOCK, challengeForNewTask, newBlock, 0);
+                MiningTask newTask = new MiningTask(ExchangeEvent.NEW_CANDIDATE_BLOCK, challengeForNewTask, newBlock, 0, System.currentTimeMillis());
                 currentMiningTaskService.saveCurrentTask(newTask);
                 miningTaskNotifier.notifyNewMiningTask(newBlock, challengeForNewTask, 0);
             } else {

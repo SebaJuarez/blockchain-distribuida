@@ -16,4 +16,5 @@ public class MiningTask implements Serializable {
     private String challenge;
     private Block block;
     private Integer retries;
+    private long createdAt;
 }
