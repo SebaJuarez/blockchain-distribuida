@@ -31,7 +31,7 @@ spec:
       # --------------------------------
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:a720ca6
+          image: sebajuarez/minerpool:1896685
           ports:
             - containerPort: 8081
           # --- LÍMITES DE RECURSOS ---
