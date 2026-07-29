@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import com.blockchain.miningpool.util.EcUtils;
 
 @Service
 public class MinerServiceImpl implements MinerService {
@@ -21,7 +22,8 @@ public class MinerServiceImpl implements MinerService {
     private final MinersRepository minersRepository;
     private final MinerScalerService minerScaler;
 
-    public MinerServiceImpl(MinersRepository minersRepository, MinerScalerService minerScaler, MeterRegistry meterRegistry) {
+    public MinerServiceImpl(MinersRepository minersRepository, MinerScalerService minerScaler,
+            MeterRegistry meterRegistry) {
         this.minersRepository = minersRepository;
         this.minerScaler = minerScaler;
 
@@ -35,8 +37,13 @@ public class MinerServiceImpl implements MinerService {
 
     @Override
     public boolean addMiner(Miner miner) {
-        if (!miner.isGpuMiner()) return false;
+        if (!miner.isGpuMiner())return false;
+        if (!EcUtils.isValidPublicKeyHex(miner.getPublicKey())) {
+            logger.warn("MinerService: registro rechazado, clave pública inválida: {}", miner.getPublicKey());
+            return false;
+        }
         minersRepository.save(miner);
+        logger.info("MinerService: minero registrado: {}", miner.getPublicKey());
         return true;
     }
 
@@ -94,10 +101,12 @@ public class MinerServiceImpl implements MinerService {
     public Long getMinersCount() {
         return minersRepository.count();
     }
+
     @Override
     public List<Miner> getMiners() {
         return (List<Miner>) minersRepository.findAll();
     }
+
     @Override
     public Optional<Miner> findById(String id) {
         return minersRepository.findById(id);

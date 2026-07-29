@@ -27,23 +27,31 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RequiredArgsConstructor
 @CrossOrigin("*")
 public class MinerController {
-
-    private final MinerService minerService;
-    private final MiningResultService miningResultService;
-
-    @PostMapping("/register")
-    public ResponseEntity<EntityModel<RegisterResponse>> registerMiner(@RequestBody Miner miner) {
-        if (!miner.isGpuMiner()) {
-            RegisterResponse resp = new RegisterResponse(HttpStatus.BAD_REQUEST, "Solo se aceptan mineros GPU");
-            return ResponseEntity
-                    .badRequest()
-                    .body(EntityModel.of(resp));
+        
+        private final MinerService minerService;
+        private final MiningResultService miningResultService;
+        private final com.blockchain.miningpool.config.PoolKeyConfig poolKeyConfig;
+        private final com.blockchain.miningpool.services.PoolAccountingService poolAccountingService;
+        
+        @PostMapping("/register")
+        public ResponseEntity<EntityModel<RegisterResponse>> registerMiner(@RequestBody Miner miner) {
+                if (!miner.isGpuMiner()) {
+                        RegisterResponse resp = new RegisterResponse(HttpStatus.BAD_REQUEST,
+                                        "Solo se aceptan mineros GPU");
+                        return ResponseEntity
+                                        .badRequest()
+                                        .body(EntityModel.of(resp));
+                }
+                boolean added = minerService.addMiner(miner);
+                if (!added) {
+                        RegisterResponse resp = new RegisterResponse(HttpStatus.BAD_REQUEST,
+                                        "Clave pública inválida: debe ser un punto EC secp256k1 en hex (comprimido 33 bytes o descomprimido 65 bytes).");
+                        return ResponseEntity.badRequest().body(EntityModel.of(resp));
+                }
+                RegisterResponse resp = new RegisterResponse(HttpStatus.OK, "Minero registrado exitosamente");
+                return ResponseEntity
+                                .ok(EntityModel.of(resp));
         }
-        minerService.addMiner(miner);
-        RegisterResponse resp = new RegisterResponse(HttpStatus.OK, "Minero registrado exitosamente");
-        return ResponseEntity
-                .ok(EntityModel.of(resp));
-    }
 
     @GetMapping("/miners")
     public ResponseEntity<CollectionModel<EntityModel<Miner>>> getMinersCount() {
@@ -85,6 +93,17 @@ public class MinerController {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(errorResource);
+    }
+
+    @GetMapping("/public-key")
+    public ResponseEntity<Map<String, String>> getPoolPublicKey() {
+        return ResponseEntity.ok(Map.of("publicKey", poolKeyConfig.getPublicKeyHex()));
+    }
+
+    @GetMapping("/miners/{publicKey}/balance")
+    public ResponseEntity<Map<String, Object>> getMinerBalance(@PathVariable String publicKey) {
+        double balance = poolAccountingService.getBalance(publicKey);
+        return ResponseEntity.ok(Map.of("publicKey", publicKey, "balance", balance));
     }
 
 

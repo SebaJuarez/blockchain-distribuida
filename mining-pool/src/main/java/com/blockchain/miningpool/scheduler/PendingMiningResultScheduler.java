@@ -6,6 +6,8 @@ import com.blockchain.miningpool.services.ReliableDeliveryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import com.blockchain.miningpool.services.PoolAccountingService;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Instant;
 
@@ -14,8 +16,11 @@ import java.time.Instant;
 public class PendingMiningResultScheduler {
 
     private final PendingMiningResultService pending;
-
     private final ReliableDeliveryService sender;
+    private final PoolAccountingService poolAccountingService;
+
+    @Value("${pool.reward.amount:20.0}")
+    private double rewardAmount;
 
     @Scheduled(fixedDelay = 5000)
     public void retryPendingResults() {
@@ -46,6 +51,7 @@ public class PendingMiningResultScheduler {
 
             if (ok) {
                 pending.delete(result.getId());
+                poolAccountingService.distributeReward(rewardAmount);
             } else {
                 pending.registerFailedAttempt(result.getId());
             }

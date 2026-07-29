@@ -1,9 +1,11 @@
 package com.blockchain.miningpool.services.impl;
 
+import com.blockchain.miningpool.config.PoolKeyConfig;
 import com.blockchain.miningpool.dtos.MiningResult;
 import com.blockchain.miningpool.models.Miner;
 import com.blockchain.miningpool.services.MinerService;
 import com.blockchain.miningpool.services.MiningResultService;
+import com.blockchain.miningpool.services.PoolAccountingService;
 import com.blockchain.miningpool.services.ReliableDeliveryService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,11 +18,14 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class MiningResultServiceImpl implements MiningResultService {
 
-    @Value("${miner.id:ERROR_MARCA_DEPA}")
-    private String minerId;
     private final ReliableDeliveryService reliableDeliveryService;
     private final MinerService minerService;
     private final MeterRegistry meterRegistry;
+    private final PoolAccountingService poolAccountingService;
+    private final PoolKeyConfig poolKeyConfig;
+
+    @Value("${pool.reward.amount:20.0}")
+    private double rewardAmount;
 
     @Override
     public boolean isValidMiningResult(MiningResult miningResult) {
@@ -31,13 +36,26 @@ public class MiningResultServiceImpl implements MiningResultService {
             return false;
         }
 
-        boolean isGpu = minerService.findById(miningResult.getMinerId()).map(Miner::isGpuMiner).orElse(false);
+        String originalMinerPublicKey = miningResult.getMinerId();
+
+        boolean isGpu = minerService.findById(originalMinerPublicKey).map(Miner::isGpuMiner).orElse(false);
         String hardwareType = isGpu ? "GPU" : "CPU";
 
         Counter.builder("mining.pool.blocks.submitted").tag("hardware", hardwareType).register(meterRegistry).increment();
         Counter.builder("mining.hashes.computed").tag("hardware", hardwareType).register(meterRegistry).increment(miningResult.getNonce());
 
-        miningResult.setMinerId(minerId);
-        return reliableDeliveryService.send(miningResult);
+        // Share = "el minero envió un resultado", sin importar si termina
+        // siendo el ganador. Se registra ANTES de reenviar al coordinador.
+        poolAccountingService.recordShare(originalMinerPublicKey);
+
+        // El pool cobra en su propio nombre, el coordinador nunca ve la
+        // clave del minero individual.
+        miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
+
+        boolean accepted = reliableDeliveryService.send(miningResult);
+        if (accepted) {
+            poolAccountingService.distributeReward(rewardAmount);
+        }
+        return accepted;
     }
 }
