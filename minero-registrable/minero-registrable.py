@@ -11,6 +11,7 @@ import requests
 import pika
 from pika import exceptions as rabbitmq_exceptions
 
+from minero.utils.identity import load_or_create_keypair
 from utils.check_gpu import check_for_nvidia_smi
 from model.block import Block
 from plugins.rabbitmq import rabbit_connect
@@ -21,8 +22,9 @@ REGISTER_URL     = f"{POOL_BASE_URL}/register"
 KEEP_ALIVE_URL   = f"{POOL_BASE_URL}/keep-alive"
 RESULTS_URL      = f"{POOL_BASE_URL}/results"
 
-MINER_ID         = os.environ.get("MINER_ID") or str(uuid.uuid4())
-MINER_PUBLIC_KEY = os.environ.get("PUBLIC_KEY")   or str(uuid.uuid4())
+_private_key, MINER_PUBLIC_KEY = load_or_create_keypair()
+MINER_ID = MINER_PUBLIC_KEY
+print(f"[identity] Clave pública del minero: {MINER_PUBLIC_KEY}", flush=True)
 
 # --- Configuración RabbitMQ ---
 RABBITMQ_HOST      = os.environ.get("RABBITMQ_HOST", "localhost")
