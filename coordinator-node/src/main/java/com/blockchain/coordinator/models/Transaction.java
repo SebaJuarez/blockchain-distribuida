@@ -18,6 +18,7 @@ public class Transaction implements Serializable {
     private String receiver;
     private double amount;
     private long timestamp;
+    private String signature;
 
     public Transaction(String sender, String receiver, double amount) {
         this.id = UUID.randomUUID().toString();

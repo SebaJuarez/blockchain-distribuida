@@ -1,13 +1,22 @@
 package com.blockchain.coordinator.controllers;
 
 import com.blockchain.coordinator.dtos.CountResponse;
+import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Transaction;
 import com.blockchain.coordinator.services.TransactionPoolService;
+import com.blockchain.coordinator.util.EcUtils;
+import org.bouncycastle.util.encoders.Hex;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.PublicKey;
+import java.security.Signature;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -21,6 +30,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 @CrossOrigin("*")
 public class TransactionController {
 
+    private static final Logger logger = LoggerFactory.getLogger(TransactionController.class);
+
     private final TransactionPoolService transactionPoolService;
 
     public TransactionController(TransactionPoolService transactionPoolService) {
@@ -28,13 +39,18 @@ public class TransactionController {
     }
 
     @PostMapping
-    public ResponseEntity<EntityModel<Transaction>> registerTransaction(@RequestBody Transaction transaction) {
-        // Se valida que la transacción tenga un ID y un timestamp válido (consistente)
+    public ResponseEntity<?> registerTransaction(@RequestBody Transaction transaction) {
         if (transaction.getId() == null || transaction.getId().isEmpty()) {
             transaction.setId(UUID.randomUUID().toString());
         }
-        if (transaction.getTimestamp() == 0) { // Si el timestamp no viene, se asigna el actual
+        if (transaction.getTimestamp() == 0) {
             transaction.setTimestamp(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC));
+        }
+
+        if (!isSignatureValid(transaction)) {
+            logger.warn("TransactionController: transacción rechazada por firma inválida. sender={}", transaction.getSender());
+            return ResponseEntity.badRequest().body(
+                    new StatusResponse("Firma inválida, ausente, o sender/receiver malformado. Transacción rechazada."));
         }
 
         transactionPoolService.addTransaction(transaction);
@@ -44,6 +60,26 @@ public class TransactionController {
                 linkTo(methodOn(TransactionController.class).getPendingTransactions()).withRel("all-pending-transactions"));
 
         return ResponseEntity.created(transactionModel.getRequiredLink("self").toUri()).body(transactionModel);
+    }
+    
+    private boolean isSignatureValid(Transaction transaction) {
+        if (!StringUtils.hasText(transaction.getSender()) || !StringUtils.hasText(transaction.getSignature())) {
+            return false;
+        }
+        try {
+            String message = transaction.getReceiver() + "|"
+                    + String.format("%.2f", transaction.getAmount()) + "|"
+                    + transaction.getTimestamp();
+
+            PublicKey senderKey = EcUtils.decodePublicKeyHex(transaction.getSender());
+            Signature verifier = Signature.getInstance("SHA256withECDSA", "BC");
+            verifier.initVerify(senderKey);
+            verifier.update(message.getBytes(StandardCharsets.UTF_8));
+            return verifier.verify(Hex.decode(transaction.getSignature()));
+        } catch (Exception e) {
+            logger.warn("TransactionController: excepción verificando firma: {}", e.getMessage());
+            return false;
+        }
     }
 
     @GetMapping("/pending")
