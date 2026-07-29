@@ -1,5 +1,6 @@
 import { api } from '../services/api.js';
 import { createEl, truncateHash, copyToClipboard, createLoadingSpinner, generateRandomAddress, shortenId } from '../utils/dom.js';
+import { signTransaction, getWalletAddress } from '../utils/crypto.js';
 
 // Renders the pending transactions list, a batch submission form, and difficulty settings
 export async function transactions(root) {
@@ -33,6 +34,19 @@ export async function transactions(root) {
         const pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
 
         root.innerHTML = ''; // Clear spinner once data is fetched
+
+        const walletAddress = getWalletAddress();
+        const walletCard = createEl('div', { className: 'bg-white p-4 rounded-lg shadow-md mb-6 flex items-center justify-between' },
+            createEl('div', { className: 'flex items-center space-x-2' },
+                createEl('i', { className: 'fas fa-wallet text-blue-600' }),
+                createEl('span', { className: 'text-gray-700 font-medium' }, 'Tu wallet:'),
+                createEl('span', { className: 'font-mono text-sm text-gray-900' }, shortenId(walletAddress, 10, 6))
+            ),
+            createEl('button', {
+                className: 'text-gray-400 hover:text-gray-600 focus:outline-none',
+                onClick: () => copyToClipboard(walletAddress)
+            }, createEl('i', { className: 'fas fa-copy text-xs' }))
+        );
 
         // --- Sección de Transacciones Pendientes ---
         const listCard = createEl('div', { className: 'bg-white p-8 rounded-lg shadow-xl mb-6' },
@@ -99,7 +113,7 @@ export async function transactions(root) {
             createEl('textarea', {
                 id: 'batch-transactions-textarea',
                 className: 'w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-y font-mono text-sm',
-                placeholder: '[ { "sender": "addr1", "receiver": "addr2", "amount": 10 }, { "sender": "addr3", "receiver": "addr4", "amount": 25 } ]',
+                placeholder: '[ { "receiver": "addr2", "amount": 10 }, { "receiver": "addr4", "amount": 25 } ]\n(sender y signature se agregan automáticamente con tu wallet local)',
                 rows: 7
             }),
             createEl('button', {
@@ -122,7 +136,13 @@ export async function transactions(root) {
                 if (!Array.isArray(arr)) {
                     throw new Error('El input debe ser un array JSON de transacciones.');
                 }
-                await Promise.all(arr.map(tx => api.createTx(tx)));
+            // sender/signature se generan acá con el wallet local; cualquier
+            // "sender" que venga en el JSON pegado se ignora, porque solo vos
+            // podés firmar con tu propia clave privada.
+            const signedTxs = await Promise.all(arr.map(tx => signTransaction(tx.receiver, tx.amount)));
+            await Promise.all(signedTxs.map(tx => api.createTx(tx)));
+
+             textarea.value = '';
                 textarea.value = '';
                 const successMessage = createEl('div', { className: 'bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mt-4' }, 'Transacciones enviadas con éxito!');
                 formCard.append(successMessage);
@@ -215,7 +235,6 @@ export async function transactions(root) {
                     const limit = Math.min(i + batchSize, totalTxs);
                     for (let j = i; j < limit; j++) {
                         currentBatch.push({
-                            sender: generateRandomAddress(),
                             receiver: generateRandomAddress(),
                             amount: Math.floor(Math.random() * 100) + 1
                         });
@@ -224,7 +243,8 @@ export async function transactions(root) {
                     if (currentBatch.length > 0) {
                         const batchMessage = createEl('div', { className: 'bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative mb-2' }, `Enviando Batch ${batchCount} (${currentBatch.length} TXs)...`);
                         randomTxMessageContainer.append(batchMessage);
-                        await Promise.all(currentBatch.map(tx => api.createTx(tx)));
+                        const signedBatch = await Promise.all(currentBatch.map(tx => signTransaction(tx.receiver, tx.amount)));
+                        await Promise.all(signedBatch.map(tx => api.createTx(tx)));
                         txSentCount += currentBatch.length;
                         batchMessage.className = 'bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-2';
                         batchMessage.innerHTML = `<i class="fas fa-check-circle mr-2"></i> Batch ${batchCount} enviado con éxito (${currentBatch.length} TXs).`;
@@ -313,7 +333,7 @@ export async function transactions(root) {
             }
         });
 
-        root.append(listCard, formCard, randomGenerateCard, difficultyCard);
+        root.append(walletCard, listCard, formCard, randomGenerateCard, difficultyCard);
 
         // Llama a la función para cargar la dificultad inicial
         await updateDifficultyDisplay();
