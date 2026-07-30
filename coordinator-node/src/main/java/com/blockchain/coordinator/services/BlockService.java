@@ -204,12 +204,12 @@ public class BlockService {
         }
     }
 
-    public void createRewardBlock(String minerId) {
+    public double createRewardBlock(String minerId) {
         double reward = rewardService.calculateReward(latestBlock.getIndex() + 1);
 
         if (reward <= 0 && blockchainConfig.isGenesisReward()) {
             logger.info("BlockService: Fondos agotados. No se genera recompensa para {}", minerId);
-            return;
+            return 0.0;
         }
 
         String rewardSender = blockchainConfig.isGenesisReward()
@@ -236,6 +236,8 @@ public class BlockService {
         logger.info("BlockService: Recompensa de {} a {}. Bloque: {} (Index: {}). Fondo restante: {}",
                 reward, minerId, recompenseBlock.getHash(), recompenseBlock.getIndex(),
                 blockchainConfig.isGenesisReward() ? balanceService.getSystemBalance() : "--");
+
+        return reward;
     }
 
     public Optional<Block> getBlockByHash(String blockHash) {

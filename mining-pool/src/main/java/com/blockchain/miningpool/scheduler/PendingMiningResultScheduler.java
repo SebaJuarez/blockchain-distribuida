@@ -10,6 +10,7 @@ import com.blockchain.miningpool.services.PoolAccountingService;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -18,9 +19,6 @@ public class PendingMiningResultScheduler {
     private final PendingMiningResultService pending;
     private final ReliableDeliveryService sender;
     private final PoolAccountingService poolAccountingService;
-
-    @Value("${pool.reward.amount:20.0}")
-    private double rewardAmount;
 
     @Scheduled(fixedDelay = 5000)
     public void retryPendingResults() {
@@ -46,12 +44,12 @@ public class PendingMiningResultScheduler {
                 continue;
             }
 
-            boolean ok = sender.retrySend(result.getMiningResult());
+            Optional<Double> deliveryOutcome = sender.retrySend(result.getMiningResult());
             processed++;
 
-            if (ok) {
+            if (deliveryOutcome.isPresent()) {
                 pending.delete(result.getId());
-                poolAccountingService.distributeReward(rewardAmount);
+                poolAccountingService.distributeReward(deliveryOutcome.get());
             } else {
                 pending.registerFailedAttempt(result.getId());
             }

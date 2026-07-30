@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class MiningResultServiceImpl implements MiningResultService {
@@ -24,8 +26,6 @@ public class MiningResultServiceImpl implements MiningResultService {
     private final PoolAccountingService poolAccountingService;
     private final PoolKeyConfig poolKeyConfig;
 
-    @Value("${pool.reward.amount:20.0}")
-    private double rewardAmount;
 
     @Override
     public boolean isValidMiningResult(MiningResult miningResult) {
@@ -52,10 +52,8 @@ public class MiningResultServiceImpl implements MiningResultService {
         // clave del minero individual.
         miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
 
-        boolean accepted = reliableDeliveryService.send(miningResult);
-        if (accepted) {
-            poolAccountingService.distributeReward(rewardAmount);
-        }
-        return accepted;
+        Optional<Double> deliveryOutcome = reliableDeliveryService.send(miningResult);
+        deliveryOutcome.ifPresent(poolAccountingService::distributeReward);
+        return deliveryOutcome.isPresent();
     }
 }

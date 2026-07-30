@@ -28,17 +28,11 @@ public class BalanceService {
     }
 
     public void increment(String publicKey, double amount) {
-        String key = BALANCE_PREFIX + publicKey;
-        double current = getBalance(publicKey);
-        double updated = current + amount;
-        redisTemplate.opsForValue().set(key, String.valueOf(updated));
+        redisTemplate.opsForValue().increment(BALANCE_PREFIX + publicKey, amount);
     }
 
     public void decrement(String publicKey, double amount) {
-        String key = BALANCE_PREFIX + publicKey;
-        double current = getBalance(publicKey);
-        double updated = current - amount;
-        redisTemplate.opsForValue().set(key, String.valueOf(updated));
+        redisTemplate.opsForValue().increment(BALANCE_PREFIX + publicKey, -amount);
     }
 
     public boolean hasFunds(String publicKey, double amount) {

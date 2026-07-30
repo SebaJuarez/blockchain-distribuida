@@ -1,6 +1,7 @@
 package com.blockchain.miningpool.services.impl;
 
 import com.blockchain.miningpool.dtos.MiningResult;
+import com.blockchain.miningpool.dtos.MiningResultResponse;
 import com.blockchain.miningpool.feingClients.CoordinatorClient;
 import com.blockchain.miningpool.services.PendingMiningResultService;
 import com.blockchain.miningpool.services.ReliableDeliveryService;
@@ -11,6 +12,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,30 +26,36 @@ public class ReliableDeliveryServiceImpl implements ReliableDeliveryService {
     @Override
     @Retry(name = "coordinator")
     @CircuitBreaker(name = "coordinator", fallbackMethod = "sendFallback")
-    public boolean send(MiningResult miningResult) {
-        ResponseEntity<String> response = coordinatorClient.sendResult(miningResult);
-        return response.getStatusCode().is2xxSuccessful();
+    public Optional<Double> send(MiningResult miningResult) {
+        ResponseEntity<MiningResultResponse> response = coordinatorClient.sendResult(miningResult);
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            return Optional.of(response.getBody().getReward());
+        }
+        return Optional.empty();
     }
 
     @Override
     @CircuitBreaker(name = "coordinator", fallbackMethod = "retryFallback")
-    public boolean retrySend(MiningResult miningResult) {
-        ResponseEntity<String> response = coordinatorClient.sendResult(miningResult);
-        return response.getStatusCode().is2xxSuccessful();
+    public Optional<Double> retrySend(MiningResult miningResult) {
+        ResponseEntity<MiningResultResponse> response = coordinatorClient.sendResult(miningResult);
+        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            return Optional.of(response.getBody().getReward());
+        }
+        return Optional.empty();
     }
 
-    public boolean sendFallback(MiningResult miningResult, Exception ex) {
+    public Optional<Double> sendFallback(MiningResult miningResult, Exception ex) {
         if (isNonRetryableError(ex)) {
-            return false;
+            return Optional.empty();
         }
         pendingMiningResultService.save(miningResult);
-        return false;
+        return Optional.empty();
     }
 
-    public boolean retryFallback(MiningResult miningResult, Exception ex) {
+    public Optional<Double> retryFallback(MiningResult miningResult, Exception ex) {
         logger.warn("Reintento falló para blockId={}, nonce={}: {}",
                 miningResult.getBlockId(), miningResult.getNonce(), ex.getMessage());
-        return false;
+        return Optional.empty();
     }
 
     private boolean isNonRetryableError(Exception ex) {
