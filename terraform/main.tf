@@ -241,6 +241,7 @@ resource "google_container_node_pool" "infra" {
   name     = "${var.cluster_name}-infra"
   cluster  = google_container_cluster.primary.name
   location = var.zone
+  initial_node_count = var.node_count
   node_config {
     machine_type = var.machine_type
     disk_size_gb = var.boot_disk_size_gb
@@ -258,6 +259,7 @@ resource "google_container_node_pool" "apps" {
   name     = "${var.cluster_name}-apps"
   cluster  = google_container_cluster.primary.name
   location = var.zone
+  initial_node_count = var.node_count
   node_config {
     machine_type = var.machine_type
     disk_size_gb = var.boot_disk_size_gb
