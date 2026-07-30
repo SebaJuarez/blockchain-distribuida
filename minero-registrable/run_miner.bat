@@ -20,7 +20,7 @@ if exist "requirements.txt" (
 )
 
 REM 4) Definir variables de entorno (ajústalas)
-set "POOL_BASE_URL=http://34.134.34.46:8081/api/pools"
+set "POOL_BASE_URL=http://localhost:8081/api/pools"
 set "RABBITMQ_HOST=
 set "MINER_ID=seba-miner-registrable-1660super"
 

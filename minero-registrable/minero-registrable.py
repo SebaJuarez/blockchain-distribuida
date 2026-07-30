@@ -11,7 +11,7 @@ import requests
 import pika
 from pika import exceptions as rabbitmq_exceptions
 
-from minero.utils.identity import load_or_create_keypair
+from utils.identity import load_or_create_keypair
 from utils.check_gpu import check_for_nvidia_smi
 from model.block import Block
 from plugins.rabbitmq import rabbit_connect

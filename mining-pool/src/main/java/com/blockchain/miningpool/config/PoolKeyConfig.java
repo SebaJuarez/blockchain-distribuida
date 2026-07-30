@@ -3,6 +3,7 @@ package com.blockchain.miningpool.config;
 import com.blockchain.miningpool.util.EcUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,10 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
+import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
@@ -38,6 +36,7 @@ public class PoolKeyConfig {
 
     @PostConstruct
     public void init() throws Exception {
+        Security.addProvider(new BouncyCastleProvider());
         File privFile = new File(keyFilePath);
         File pubFile = new File(keyFilePath + ".pub");
 
