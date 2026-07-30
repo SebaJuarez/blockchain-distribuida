@@ -48,11 +48,13 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
         long totalShares = 0L;
 
         for (String key : shareKeys) {
+            String raw = redisTemplate.opsForValue().getAndSet(key, "0");
+
             if (key.equals(SHARE_TOTAL_KEY)) continue;
-            String minerPublicKey = key.substring(SHARE_PREFIX.length());
-            String raw = redisTemplate.opsForValue().get(key);
+
             long shares = raw != null ? Long.parseLong(raw) : 0L;
             if (shares <= 0) continue;
+            String minerPublicKey = key.substring(SHARE_PREFIX.length());
             sharesByMiner.put(minerPublicKey, shares);
             totalShares += shares;
         }
@@ -76,8 +78,7 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
                     minerPublicKey, portion, shares, totalShares);
         }
 
-        redisTemplate.delete(shareKeys);
-        logger.info("PoolAccountingService: reparto completado, {} shares reseteados.", totalShares);
+        logger.info("PoolAccountingService: reparto completado, {} shares procesados.", totalShares);
     }
 
     @Override
