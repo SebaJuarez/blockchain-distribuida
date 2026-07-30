@@ -1,8 +1,10 @@
 package com.blockchain.coordinator.controllers;
 
+import com.blockchain.coordinator.config.BlockchainConfig;
 import com.blockchain.coordinator.dtos.CountResponse;
 import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Transaction;
+import com.blockchain.coordinator.services.BalanceService;
 import com.blockchain.coordinator.services.TransactionPoolService;
 import com.blockchain.coordinator.util.EcUtils;
 import org.bouncycastle.util.encoders.Hex;
@@ -33,9 +35,15 @@ public class TransactionController {
     private static final Logger logger = LoggerFactory.getLogger(TransactionController.class);
 
     private final TransactionPoolService transactionPoolService;
+    private final BalanceService balanceService;
+    private final BlockchainConfig blockchainConfig;
 
-    public TransactionController(TransactionPoolService transactionPoolService) {
+    public TransactionController(TransactionPoolService transactionPoolService,
+                                 BalanceService balanceService,
+                                 BlockchainConfig blockchainConfig) {
         this.transactionPoolService = transactionPoolService;
+        this.balanceService = balanceService;
+        this.blockchainConfig = blockchainConfig;
     }
 
     @PostMapping
@@ -53,6 +61,15 @@ public class TransactionController {
                     new StatusResponse("Firma inválida, ausente, o sender/receiver malformado. Transacción rechazada."));
         }
 
+        if (blockchainConfig.isProduction()) {
+            if (!balanceService.hasFunds(transaction.getSender(), transaction.getAmount())) {
+                logger.warn("TransactionController: fondos insuficientes para {}", transaction.getSender());
+                return ResponseEntity.badRequest().body(
+                        new StatusResponse("Fondos insuficientes. Balance: " + balanceService.getBalance(transaction.getSender()))
+                );
+            }
+        }
+
         transactionPoolService.addTransaction(transaction);
 
         EntityModel<Transaction> transactionModel = EntityModel.of(transaction,
@@ -61,7 +78,7 @@ public class TransactionController {
 
         return ResponseEntity.created(transactionModel.getRequiredLink("self").toUri()).body(transactionModel);
     }
-    
+
     private boolean isSignatureValid(Transaction transaction) {
         if (!StringUtils.hasText(transaction.getSender()) || !StringUtils.hasText(transaction.getSignature())) {
             return false;

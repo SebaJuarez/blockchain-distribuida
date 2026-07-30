@@ -1,12 +1,10 @@
 package com.blockchain.coordinator.controllers;
 
-import com.blockchain.coordinator.models.Transaction;
-import com.blockchain.coordinator.services.BlockService;
+import com.blockchain.coordinator.services.BalanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.stream.StreamSupport;
 
 @RestController
 @RequestMapping("/api/balance")
@@ -14,15 +12,10 @@ import java.util.stream.StreamSupport;
 @CrossOrigin("*")
 public class BalanceController {
 
-    private final BlockService blockService;
+    private final BalanceService balanceService;
 
     @GetMapping("/{publicKey}")
     public Map<String, Object> getBalance(@PathVariable String publicKey) {
-        double balance = StreamSupport.stream(blockService.blockRepository.findAll().spliterator(), false)
-                .flatMap(b -> b.getData().stream())
-                .filter(tx -> publicKey.equals(tx.getReceiver()))
-                .mapToDouble(Transaction::getAmount)
-                .sum();
-        return Map.of("publicKey", publicKey, "balance", balance);
+        return Map.of("publicKey", publicKey, "balance", balanceService.getBalance(publicKey));
     }
 }

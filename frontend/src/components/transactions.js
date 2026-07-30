@@ -36,6 +36,14 @@ export async function transactions(root) {
         root.innerHTML = ''; // Clear spinner once data is fetched
 
         const walletAddress = getWalletAddress();
+
+        let blockchainConfig = {};
+        try {
+            blockchainConfig = await api.config();
+        } catch (e) {
+            console.warn('No se pudo obtener config del backend', e);
+        }
+
         const walletCard = createEl('div', { className: 'bg-white p-4 rounded-lg shadow-md mb-6 flex items-center justify-between' },
             createEl('div', { className: 'flex items-center space-x-2' },
                 createEl('i', { className: 'fas fa-wallet text-blue-600' }),
@@ -47,6 +55,39 @@ export async function transactions(root) {
                 onClick: () => copyToClipboard(walletAddress)
             }, createEl('i', { className: 'fas fa-copy text-xs' }))
         );
+
+        // Faucet para testing
+        if (blockchainConfig.mode === 'testing') {
+            const faucetCard = createEl('div', { className: 'bg-gradient-to-r from-orange-100 to-yellow-100 p-6 rounded-lg shadow-md mb-6 border border-orange-200' },
+                createEl('div', { className: 'flex items-center justify-between' },
+                    createEl('div', {},
+                        createEl('h3', { className: 'text-lg font-bold text-orange-800 mb-1' }, '🚰 Fondo de Pruebas (Faucet)'),
+                        createEl('p', { className: 'text-sm text-orange-700' },
+                            `Modo testing. Fondo restante: ${blockchainConfig.genesisSupply !== undefined ? Number(blockchainConfig.genesisSupply).toLocaleString() : 'N/A'}`)
+                    ),
+                    createEl('button', {
+                        className: 'px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow hover:bg-orange-600 transition-colors',
+                        onClick: async () => {
+                            try {
+                                const res = await api.faucet({ publicKey: walletAddress, amount: 10000 });
+                                const msg = createEl('div', { className: 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-lg text-sm' },
+                                    `Faucet: +${Number(res.amount).toLocaleString()} coins. Balance: ${Number(res.newBalance).toLocaleString()}`
+                                );
+                                document.body.append(msg);
+                                setTimeout(() => msg.remove(), 3000);
+                            } catch (err) {
+                                const msg = createEl('div', { className: 'fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg text-sm' },
+                                    'Error faucet: ' + (err.message || 'No disponible')
+                                );
+                                document.body.append(msg);
+                                setTimeout(() => msg.remove(), 3000);
+                            }
+                        }
+                    }, 'Cargar 10,000')
+                )
+            );
+            root.appendChild(faucetCard);
+        }
 
         // --- Sección de Transacciones Pendientes ---
         const listCard = createEl('div', { className: 'bg-white p-8 rounded-lg shadow-xl mb-6' },
@@ -84,14 +125,14 @@ export async function transactions(root) {
                                 createEl('button', {
                                     className: 'ml-2 text-gray-400 hover:text-gray-600 focus:outline-none',
                                     onClick: (e) => { e.preventDefault(); copyToClipboard(tx.sender); }
-                                    }, createEl('i', { className: 'fas fa-copy text-xs' }))
+                                }, createEl('i', { className: 'fas fa-copy text-xs' }))
                             ),
                             createEl('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900' },
                                 createEl('span', { className: 'font-mono text-xs md:text-sm' }, shortenId(tx.receiver)),
                                 createEl('button', {
                                     className: 'ml-2 text-gray-400 hover:text-gray-600 focus:outline-none',
                                     onClick: (e) => { e.preventDefault(); copyToClipboard(tx.receiver); }
-                                    }, createEl('i', { className: 'fas fa-copy text-xs' }))
+                                }, createEl('i', { className: 'fas fa-copy text-xs' }))
                             ),
                             createEl('td', { className: 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900' }, tx.amount.toLocaleString()),
                             createEl('td', { className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' }, new Date(tx.timestamp * 1000).toLocaleString())
@@ -136,13 +177,13 @@ export async function transactions(root) {
                 if (!Array.isArray(arr)) {
                     throw new Error('El input debe ser un array JSON de transacciones.');
                 }
-            // sender/signature se generan acá con el wallet local; cualquier
-            // "sender" que venga en el JSON pegado se ignora, porque solo vos
-            // podés firmar con tu propia clave privada.
-            const signedTxs = await Promise.all(arr.map(tx => signTransaction(tx.receiver, tx.amount)));
-            await Promise.all(signedTxs.map(tx => api.createTx(tx)));
+                // sender/signature se generan acá con el wallet local; cualquier
+                // "sender" que venga en el JSON pegado se ignora, porque solo vos
+                // podés firmar con tu propia clave privada.
+                const signedTxs = await Promise.all(arr.map(tx => signTransaction(tx.receiver, tx.amount)));
+                await Promise.all(signedTxs.map(tx => api.createTx(tx)));
 
-             textarea.value = '';
+                textarea.value = '';
                 textarea.value = '';
                 const successMessage = createEl('div', { className: 'bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mt-4' }, 'Transacciones enviadas con éxito!');
                 formCard.append(successMessage);

@@ -155,4 +155,16 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ difficulty: difficultyString })
     }),
+    /**
+     * Retrieves the current challenge string.
+     *
+     * @returns {Promise<string>} - The current challenge string.
+     */
+        config: () => fetchJSON('/config'),
+
+    faucet: (body) => fetchJSON('/faucet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }),
 };

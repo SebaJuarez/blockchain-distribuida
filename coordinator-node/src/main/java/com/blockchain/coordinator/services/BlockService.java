@@ -1,5 +1,6 @@
 package com.blockchain.coordinator.services;
 
+import com.blockchain.coordinator.config.BlockchainConfig;
 import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.Transaction;
@@ -38,11 +39,18 @@ public class BlockService {
     private final CurrentMiningTaskService currentMiningTaskService;
     private final DifficultyService difficultyService;
     private final MeterRegistry meterRegistry;
+    private final BalanceService balanceService;
+    private final RewardService rewardService;
+    private final BlockchainConfig blockchainConfig;
     private final String BLOCK_HASHES_ZSET_KEY = "block_hashes";
     private String latestBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
     private Block latestBlock;
 
-    public BlockService(BlockRepository blockRepository, TransactionPoolService transactionPoolService, RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper, CurrentMiningTaskService currentMiningTaskService, DifficultyService difficultyService, MeterRegistry meterRegistry) {
+    public BlockService(BlockRepository blockRepository, TransactionPoolService transactionPoolService,
+                        RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper,
+                        CurrentMiningTaskService currentMiningTaskService, DifficultyService difficultyService,
+                        MeterRegistry meterRegistry, BalanceService balanceService,
+                        RewardService rewardService, BlockchainConfig blockchainConfig) {
         this.blockRepository = blockRepository;
         this.transactionPoolService = transactionPoolService;
         this.redisTemplate = redisTemplate;
@@ -50,6 +58,9 @@ public class BlockService {
         this.currentMiningTaskService = currentMiningTaskService;
         this.difficultyService = difficultyService;
         this.meterRegistry = meterRegistry;
+        this.balanceService = balanceService;
+        this.rewardService = rewardService;
+        this.blockchainConfig = blockchainConfig;
 
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -97,6 +108,9 @@ public class BlockService {
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, genesisBlock.getHash(), genesisBlock.getTimestamp());
         this.latestBlock = genesisBlock;
         this.latestBlockHash = genesisBlock.getHash();
+
+        balanceService.initGenesisBalance();
+
         logger.info("BlockService: Se creo el bloque genesis: {} (Index: {})", genesisBlock.getHash(), genesisBlock.getIndex());
     }
 
@@ -169,7 +183,8 @@ public class BlockService {
             this.latestBlock = savedBlock;
             this.latestBlockHash = savedBlock.getHash();
 
-            // MTRICAS
+            balanceService.applyBlock(savedBlock);
+
             Timer.builder("mining.block.resolution.time")
                     .tag("difficulty", String.valueOf(currentTask.getChallenge().length()))
                     .register(meterRegistry)
@@ -190,15 +205,37 @@ public class BlockService {
     }
 
     public void createRewardBlock(String minerId) {
+        double reward = rewardService.calculateReward(latestBlock.getIndex() + 1);
+
+        if (reward <= 0 && blockchainConfig.isGenesisReward()) {
+            logger.info("BlockService: Fondos agotados. No se genera recompensa para {}", minerId);
+            return;
+        }
+
+        String rewardSender = blockchainConfig.isGenesisReward()
+                ? blockchainConfig.getSystemAddress()
+                : "system";
+
+        if (blockchainConfig.isGenesisReward()) {
+            balanceService.decrement(rewardSender, reward);
+        }
+
         long blockTimestamp = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
-        List<Transaction> blockTransactions = Collections.singletonList(new Transaction("system", minerId, 20.0));
+        List<Transaction> blockTransactions = Collections.singletonList(
+                new Transaction(rewardSender, minerId, reward)
+        );
         Block recompenseBlock = new Block(latestBlock.getIndex() + 1, latestBlockHash, blockTransactions, blockTimestamp, 0, "");
         recompenseBlock.setHash(calculateFinalBlockHash(recompenseBlock));
         blockRepository.save(recompenseBlock);
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, recompenseBlock.getHash(), recompenseBlock.getTimestamp());
+
+        balanceService.applyBlock(recompenseBlock);
+
         this.latestBlock = recompenseBlock;
         this.latestBlockHash = recompenseBlock.getHash();
-        logger.info("BlockService: Se creo y añadió el bloque recompensa para el minero: {} Bloque: {} (Index: {})", minerId, recompenseBlock.getHash(), recompenseBlock.getIndex());
+        logger.info("BlockService: Recompensa de {} a {}. Bloque: {} (Index: {}). Fondo restante: {}",
+                reward, minerId, recompenseBlock.getHash(), recompenseBlock.getIndex(),
+                blockchainConfig.isGenesisReward() ? balanceService.getSystemBalance() : "--");
     }
 
     public Optional<Block> getBlockByHash(String blockHash) {
