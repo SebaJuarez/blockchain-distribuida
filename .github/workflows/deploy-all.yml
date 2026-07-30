@@ -9,35 +9,82 @@ jobs:
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-      GKE_CLUSTER_LOCATION: ${{ secrets.GKE_CLUSTER_LOCATION }} 
+      GKE_CLUSTER_LOCATION: ${{ secrets.GKE_CLUSTER_LOCATION }}
       GOOGLE_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Autenticar con GCP
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ env.GOOGLE_CREDENTIALS }}
 
       - name: Obtener credenciales de GKE
-        uses: google-github-actions/get-gke-credentials@v1
+        uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ env.GKE_CLUSTER_NAME }}
           location:     ${{ env.GKE_CLUSTER_LOCATION }}
           project_id:   ${{ env.GCP_PROJECT_ID }}
 
-      - name: Crear Kubernetes Secrets
+      - name: Aplicar Namespaces
+        run: |
+          echo "==> Creando namespaces..."
+          kubectl apply -f deploy/namespaces/
+
+      - name: Aplicar Infraestructura (Redis + RabbitMQ)
+        run: |
+          echo "==> Aplicando Redis y RabbitMQ..."
+          kubectl apply -f deploy/redis-rabbit/
+
+      - name: Esperar a que la infraestructura esté Ready
+        run: |
+          echo "==> Esperando a Redis..."
+          kubectl rollout status statefulset/redis -n infra --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=redis -n infra --timeout=120s
+
+          echo "==> Esperando a RabbitMQ..."
+          kubectl rollout status statefulset/rabbitmq -n infra --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=rabbitmq -n infra --timeout=120s
+
+      - name: Crear/Actualizar Kubernetes Secrets
         run: |
           printf '%s' '${{ secrets.POOL_SECRET_YAML }}' | kubectl apply -f -
           printf '%s' '${{ secrets.COORDINADOR_SECRET_YAML }}' | kubectl apply -f -
 
-      - name: Aplicar manifests
+      - name: Aplicar manifests de aplicación (en orden)
         run: |
-          kubectl apply -f deploy/namespaces/
-          kubectl apply -f deploy/redis-rabbit/
+          echo "==> Aplicando RBAC y ServiceAccount..."
           kubectl apply -f deploy/serviceAccount/
+
+          echo "==> Aplicando ConfigMaps..."
           kubectl apply -f deploy/configMaps/
-          kubectl apply -f deploy/services/
+
+          echo "==> Aplicando Services..."
+          kubectl apply -f deploy/services/coordinador-serv.yaml
+          kubectl apply -f deploy/services/nodepool-service.yaml
+          kubectl apply -f deploy/services/nodepool-service-internal.yaml
+
+          echo "==> Aplicando Deployments..."
           kubectl apply -f deploy/deployment/
-          kubectl apply -f deploy/services/monitoring/
+
+      - name: Esperar a que los deployments estén Ready
+        run: |
+          echo "==> Esperando al Coordinador..."
+          kubectl rollout status deployment/nodo-coordinador -n apps --timeout=180s
+
+          echo "==> Esperando al Mining Pool..."
+          kubectl rollout status deployment/node-pool -n apps --timeout=180s
+
+          echo "==> Verificando pods Ready..."
+          kubectl wait --for=condition=ready pod -l app=nodo-coordinador -n apps --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=node-pool -n apps --timeout=120s
+
+      - name: Aplicar ServiceMonitor (solo si existe el CRD)
+        run: |
+          if kubectl get crd servicemonitors.monitoring.coreos.com > /dev/null 2>&1; then
+            echo "==> CRD de Prometheus encontrado. Aplicando ServiceMonitor..."
+            kubectl apply -f deploy/services/monitoring/
+          else
+            echo "==> CRD de Prometheus NO encontrado. Saltando ServiceMonitor."
+          fi
