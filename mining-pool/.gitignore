@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### identity keys ###
+*.key
+*.pub
+*.pem
+*.pkcs8

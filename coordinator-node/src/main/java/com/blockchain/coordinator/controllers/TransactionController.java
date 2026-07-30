@@ -1,18 +1,30 @@
 package com.blockchain.coordinator.controllers;
 
+import com.blockchain.coordinator.config.BlockchainConfig;
 import com.blockchain.coordinator.dtos.CountResponse;
+import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.models.Transaction;
+import com.blockchain.coordinator.services.BalanceService;
 import com.blockchain.coordinator.services.TransactionPoolService;
+import com.blockchain.coordinator.util.EcUtils;
+import org.bouncycastle.util.encoders.Hex;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.PublicKey;
+import java.security.Signature;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
@@ -21,20 +33,42 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 @CrossOrigin("*")
 public class TransactionController {
 
-    private final TransactionPoolService transactionPoolService;
+    private static final Logger logger = LoggerFactory.getLogger(TransactionController.class);
 
-    public TransactionController(TransactionPoolService transactionPoolService) {
+    private final TransactionPoolService transactionPoolService;
+    private final BalanceService balanceService;
+    private final BlockchainConfig blockchainConfig;
+
+    public TransactionController(TransactionPoolService transactionPoolService,
+                                 BalanceService balanceService,
+                                 BlockchainConfig blockchainConfig) {
         this.transactionPoolService = transactionPoolService;
+        this.balanceService = balanceService;
+        this.blockchainConfig = blockchainConfig;
     }
 
     @PostMapping
-    public ResponseEntity<EntityModel<Transaction>> registerTransaction(@RequestBody Transaction transaction) {
-        // Se valida que la transacción tenga un ID y un timestamp válido (consistente)
+    public ResponseEntity<?> registerTransaction(@RequestBody Transaction transaction) {
         if (transaction.getId() == null || transaction.getId().isEmpty()) {
             transaction.setId(UUID.randomUUID().toString());
         }
-        if (transaction.getTimestamp() == 0) { // Si el timestamp no viene, se asigna el actual
+        if (transaction.getTimestamp() == 0) {
             transaction.setTimestamp(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC));
+        }
+
+        if (!isSignatureValid(transaction)) {
+            logger.warn("TransactionController: transacción rechazada por firma inválida. sender={}", transaction.getSender());
+            return ResponseEntity.badRequest().body(
+                    new StatusResponse("Firma inválida, ausente, o sender/receiver malformado. Transacción rechazada."));
+        }
+
+        if (blockchainConfig.isProduction()) {
+            if (!balanceService.hasFunds(transaction.getSender(), transaction.getAmount())) {
+                logger.warn("TransactionController: fondos insuficientes para {}", transaction.getSender());
+                return ResponseEntity.badRequest().body(
+                        new StatusResponse("Fondos insuficientes. Balance: " + balanceService.getBalance(transaction.getSender()))
+                );
+            }
         }
 
         transactionPoolService.addTransaction(transaction);
@@ -44,6 +78,26 @@ public class TransactionController {
                 linkTo(methodOn(TransactionController.class).getPendingTransactions()).withRel("all-pending-transactions"));
 
         return ResponseEntity.created(transactionModel.getRequiredLink("self").toUri()).body(transactionModel);
+    }
+
+    private boolean isSignatureValid(Transaction transaction) {
+        if (!StringUtils.hasText(transaction.getSender()) || !StringUtils.hasText(transaction.getSignature())) {
+            return false;
+        }
+        try {
+            String message = transaction.getReceiver() + "|"
+                    + String.format(Locale.US, "%.2f", transaction.getAmount()) + "|"  // <-- FIX: Locale.US
+                    + transaction.getTimestamp();
+
+            PublicKey senderKey = EcUtils.decodePublicKeyHex(transaction.getSender());
+            Signature verifier = Signature.getInstance("SHA256withECDSA", "BC");
+            verifier.initVerify(senderKey);
+            verifier.update(message.getBytes(StandardCharsets.UTF_8));
+            return verifier.verify(Hex.decode(transaction.getSignature()));
+        } catch (Exception e) {
+            logger.warn("TransactionController: excepción verificando firma: {}", e.getMessage());
+            return false;
+        }
     }
 
     @GetMapping("/pending")

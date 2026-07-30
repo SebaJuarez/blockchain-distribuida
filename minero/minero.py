@@ -13,13 +13,15 @@ from pika import exceptions as rabbitmq_exceptions
 from plugins.rabbitmq import rabbit_connect
 from model.block import Block
 from utils.check_gpu import check_for_nvidia_smi
+from utils.identity import load_or_create_keypair
 
 # --- Configuración ---
 BLOCKS_COORDINATOR_URL = os.environ.get(
     "BLOCKS_COORDINATOR_URL", "http://localhost:8080/api/blocks/result"
 )
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
-MINER_ID = os.environ.get("MINER_ID", "miner-python-001")
+_private_key, MINER_ID = load_or_create_keypair()
+print(f"[identity] Clave pública del minero (MINER_ID): {MINER_ID}", flush=True)
 
 EXCHANGE_NAME = "blockchain"
 EXCHANGE_TYPE = "fanout"

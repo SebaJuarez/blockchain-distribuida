@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import com.blockchain.coordinator.dtos.MiningResultResponse;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
@@ -68,20 +69,20 @@ public class BlockController {
 
     @PostMapping("/result")
     @Timed(value = "mining.block.validation.time", description = "Tiempo de CPU validando bloques entrantes")
-    public ResponseEntity<String> validateBlock(@RequestBody MiningResult candidateBlock) {
+    public ResponseEntity<MiningResultResponse> validateBlock(@RequestBody MiningResult candidateBlock) {
         logger.info("Se recibio el bloque {} del minero {}", candidateBlock.getBlockId(), candidateBlock.getMinerId());
         Optional<Block> addedBlock = blockService.addMinedBlock(candidateBlock.getBlockId(), candidateBlock.getNonce(), candidateBlock.getHash());
         if (addedBlock.isPresent()) {
             Block solvedBlock = addedBlock.get();
             logger.info("Bloque {} añadido exitosamente a la blockchain por el minero {}", solvedBlock.getHash(), candidateBlock.getMinerId());
-            blockService.createRewardBlock(candidateBlock.getMinerId());
+            double reward = blockService.createRewardBlock(candidateBlock.getMinerId());
             queueAdminService.purgeBlocksQueue();
             miningTaskNotifier.notifySolvedCandidateBlock(candidateBlock.getBlockId(), candidateBlock.getMinerId());
             currentMiningTaskService.clearCurrentTask();
-            return ResponseEntity.ok("Solución valida, Bloque añadido a la blockchain.");
+            return ResponseEntity.ok(new MiningResultResponse("Solución valida, Bloque añadido a la blockchain.", reward));
         } else {
             logger.warn("Fallo la validacion o ya fue resuelto el bloque: {}", candidateBlock.getBlockId());
-            return ResponseEntity.badRequest().body("Falló la validación o el bloque ya fue resuelto por otro minero.");
+            return ResponseEntity.badRequest().body(new MiningResultResponse("Falló la validación o el bloque ya fue resuelto por otro minero.", 0.0));
         }
     }
 }

@@ -13,6 +13,11 @@ services:
         - SPRING_REDIS_PORT=6379
         - SPRING_RABBIT_HOST=rabbitmq
         - SPRING_RABBIT_PORT=5672
+        - BLOCKCHAIN_MODE=testing
+        - BLOCKCHAIN_REWARD_SOURCE=genesis
+        - BLOCKCHAIN_GENESIS_SUPPLY=21000000
+        - BLOCKCHAIN_BASE_REWARD=50
+        - BLOCKCHAIN_HALVING_INTERVAL=10
       depends_on:
         redis:
           condition: service_healthy

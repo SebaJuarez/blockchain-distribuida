@@ -1,7 +1,7 @@
 package com.blockchain.miningpool.feingClients;
 
-
 import com.blockchain.miningpool.dtos.MiningResult;
+import com.blockchain.miningpool.dtos.MiningResultResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,5 +15,5 @@ public interface CoordinatorClient {
             value = "/result",
             consumes = MediaType.APPLICATION_JSON_VALUE
     )
-    ResponseEntity<String> sendResult(@RequestBody MiningResult miningTaskResult);
+    ResponseEntity<MiningResultResponse> sendResult(@RequestBody MiningResult miningTaskResult);
 }
