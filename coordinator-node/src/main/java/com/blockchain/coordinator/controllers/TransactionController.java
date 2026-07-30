@@ -24,6 +24,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
@@ -85,7 +86,7 @@ public class TransactionController {
         }
         try {
             String message = transaction.getReceiver() + "|"
-                    + String.format("%.2f", transaction.getAmount()) + "|"
+                    + String.format(Locale.US, "%.2f", transaction.getAmount()) + "|"  // <-- FIX: Locale.US
                     + transaction.getTimestamp();
 
             PublicKey senderKey = EcUtils.decodePublicKeyHex(transaction.getSender());
