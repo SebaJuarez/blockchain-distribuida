@@ -70,9 +70,9 @@ export function createLoadingSpinner() {
 }
 
 // Function to generate a random alphanumeric string for addresses
-export function generateRandomAddress(length = 10) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
+export function generateRandomAddress(length = 40) {
+    const chars = 'abcdef0123456789';
+    let result = '04';
     for (let i = 0; i < length; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
