@@ -28,7 +28,7 @@ spec:
       # --------------------------------
       containers:
         - name: nodo-coordinador
-          image: sebajuarez/coordinador:a53dff9
+          image: sebajuarez/coordinador:222c0e9
           ports:
             - containerPort: 8080
           # --- LÍMITES DE RECURSOS ---
