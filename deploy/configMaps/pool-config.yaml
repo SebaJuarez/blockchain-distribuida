@@ -17,3 +17,4 @@ data:
   GCP_PROJECT_ID: "sdypp-final-501419"
   GCP_COMPUTE_ZONE: "us-central1-a"
   GCP_COMPUTE_MIG_NAME: "python-miners-mig"
+  POOL_IDENTITY_KEY_FILE: "/tmp/pool-identity.key"

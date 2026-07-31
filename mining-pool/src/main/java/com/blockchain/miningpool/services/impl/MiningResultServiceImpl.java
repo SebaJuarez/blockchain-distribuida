@@ -44,13 +44,13 @@ public class MiningResultServiceImpl implements MiningResultService {
         Counter.builder("mining.pool.blocks.submitted").tag("hardware", hardwareType).register(meterRegistry).increment();
         Counter.builder("mining.hashes.computed").tag("hardware", hardwareType).register(meterRegistry).increment(miningResult.getNonce());
 
-        // Share = "el minero envió un resultado", sin importar si termina
-        // siendo el ganador. Se registra ANTES de reenviar al coordinador.
-        poolAccountingService.recordShare(originalMinerPublicKey);
+        // Si el minerId no es una clave EC válida (VMs del MIG sin identidad),
+        // el trabajo se atribuye al pool en vez de fragmentarse.
+        String shareOwner = com.blockchain.miningpool.util.EcUtils.isValidPublicKeyHex(originalMinerPublicKey)
+                ? originalMinerPublicKey
+                : poolKeyConfig.getPublicKeyHex();
 
-        // El pool cobra en su propio nombre, el coordinador nunca ve la
-        // clave del minero individual.
-        miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
+        poolAccountingService.recordShare(shareOwner);
 
         Optional<Double> deliveryOutcome = reliableDeliveryService.send(miningResult);
         deliveryOutcome.ifPresent(poolAccountingService::distributeReward);
