@@ -48,6 +48,7 @@ public class TaskScheduler {
                 queueAdminService.purgeBlocksQueue();
             } else {
                 currentMiningTaskService.incrementCurrentTaskRetries();
+                Counter.builder("mining.blocks.retried").register(meterRegistry).increment();
                 logger.info("Scheduler: Tarea de minería ({}) persistente, reintentos: {}.", prevTask.getBlock().getHash(), prevTask.getRetries());
                 return;
             }

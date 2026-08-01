@@ -41,8 +41,14 @@ public class MiningResultServiceImpl implements MiningResultService {
         boolean isGpu = minerService.findById(originalMinerPublicKey).map(Miner::isGpuMiner).orElse(false);
         String hardwareType = isGpu ? "GPU" : "CPU";
 
-        Counter.builder("mining.pool.blocks.submitted").tag("hardware", hardwareType).register(meterRegistry).increment();
-        Counter.builder("mining.hashes.computed").tag("hardware", hardwareType).register(meterRegistry).increment(miningResult.getNonce());
+        Counter.builder("mining.pool.blocks.submitted")
+                .tag("hardware", hardwareType)
+                .tag("miner", originalMinerPublicKey)
+                .register(meterRegistry).increment();
+        Counter.builder("mining.hashes.computed")
+                .tag("hardware", hardwareType)
+                .tag("miner", originalMinerPublicKey)
+                .register(meterRegistry).increment(miningResult.getNonce());
 
         // Si el minerId no es una clave EC válida (VMs del MIG sin identidad),
         // el trabajo se atribuye al pool en vez de fragmentarse.
@@ -53,7 +59,12 @@ public class MiningResultServiceImpl implements MiningResultService {
         poolAccountingService.recordShare(shareOwner);
 
         Optional<Double> deliveryOutcome = reliableDeliveryService.send(miningResult);
-        deliveryOutcome.ifPresent(poolAccountingService::distributeReward);
+        deliveryOutcome.ifPresent(reward -> {
+            poolAccountingService.distributeReward(reward);
+            Counter.builder("mining.pool.blocks.accepted")
+                    .tag("hardware", hardwareType)
+                    .register(meterRegistry).increment();
+        });
         return deliveryOutcome.isPresent();
     }
 }

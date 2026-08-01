@@ -1,5 +1,7 @@
 package com.blockchain.coordinator.services;
 
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,9 +22,13 @@ public class DifficultyService {
 
     public DifficultyService(
             RedisTemplate<String, String> redisTemplate,
-            @Value("${blockchain.mining.default-hash-challenge}") String defaultHashChallenge) {
+            @Value("${blockchain.mining.default-hash-challenge}") String defaultHashChallenge,
+            MeterRegistry meterRegistry) {
         this.redisTemplate = redisTemplate;
         this.defaultHashChallenge = defaultHashChallenge;
+        Gauge.builder("mining.difficulty.zeros", this, s -> (double) s.getCurrentChallenge().length())
+                .description("Ceros iniciales requeridos (dificultad actual)")
+                .register(meterRegistry);
     }
 
     public void loadCurrentSystemChallenge() {
