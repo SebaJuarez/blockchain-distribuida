@@ -1,26 +1,192 @@
 adminPassword: admin
 
+# --- Datasources 
 datasources:
   datasources.yaml:
     apiVersion: 1
     datasources:
       - name: Prometheus
+        uid: prometheus_ds
         type: prometheus
         url: http://prometheus-v2-kube-prometh-prometheus.observability.svc.cluster.local:9090
         access: proxy
         isDefault: true
       - name: Loki
+        uid: loki_ds
         type: loki
         url: http://loki-v2-gateway.observability.svc.cluster.local
         access: proxy
 
-dashboardProviders:
-  dashboardproviders.yaml:
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+    folder: /tmp/dashboards
+    searchNamespace: observability
+    provider:
+      name: sidecarProvider
+      folder: "Blockchain"
+      foldersFromFilesStructure: false
+
+# --- Alerting
+alerting:
+  alerts.yml:
     apiVersion: 1
-    providers:
-      - name: default
-        orgId: 1
-        folder: ''
-        type: file
-        options:
-          path: /var/lib/grafana/dashboards
+
+    contactPoints:
+      - orgId: 1
+        name: default-notifications
+        receivers:
+          - uid: default-webhook
+            type: webhook
+            settings:
+              url: http://localhost:9999/reemplazar-por-webhook-real
+            disableResolveMessage: false
+
+    policies:
+      - orgId: 1
+        receiver: default-notifications
+        group_by: ["alertname"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+
+    groups:
+      - orgId: 1
+        name: mining-health
+        folder: Blockchain Alerts
+        interval: 1m
+        rules:
+
+          - uid: no-blocks-mined-10m
+            title: "Sin bloques minados en 10 minutos"
+            condition: C
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "La cadena no avanzó en los últimos 10 minutos"
+              description: "increase(mining_blocks_solved_total[10m]) == 0. Puede ser dificultad muy alta o mineros caídos."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 600, to: 0 }
+                datasourceUid: prometheus_ds
+                model:
+                  expr: increase(mining_blocks_solved_total[10m])
+                  instant: true
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: lt, params: [1] }
+                  refId: C
+
+          - uid: no-active-miners
+            title: "Sin mineros activos en el pool"
+            condition: C
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "mining_pool_miners{type=total} == 0"
+              description: "El pool quedó sin mineros registrados. El MIG debería estar escalando o hay un problema de keep-alive."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 120, to: 0 }
+                datasourceUid: prometheus_ds
+                model:
+                  expr: mining_pool_miners{type="total"}
+                  instant: true
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: lt, params: [1] }
+                  refId: C
+
+          - uid: high-discard-rate
+            title: "Tasa alta de bloques descartados"
+            condition: C
+            for: 0m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Más de 3 bloques descartados en 15 minutos"
+              description: "Posible dificultad demasiado alta para el hardware disponible, o mineros que no responden a tiempo."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 900, to: 0 }
+                datasourceUid: prometheus_ds
+                model:
+                  expr: increase(mining_blocks_discarded_total[15m])
+                  instant: true
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: gt, params: [3] }
+                  refId: C
+
+          - uid: high-rabbitmq-latency
+            title: "Latencia alta entre RabbitMQ y el pool"
+            condition: C
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Latencia promedio > 3s en los últimos 5 minutos"
+              description: "El pool está tardando en consumir las tareas publicadas por el coordinador. Revisar carga de RabbitMQ o del pool."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: prometheus_ds
+                model:
+                  expr: rate(mining_rabbitmq_latency_seconds_sum[5m]) / rate(mining_rabbitmq_latency_seconds_count[5m])
+                  instant: true
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: gt, params: [3] }
+                  refId: C
