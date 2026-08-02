@@ -1,6 +1,7 @@
 package com.blockchain.coordinator.services;
 
 import com.blockchain.coordinator.models.Transaction;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -12,16 +13,18 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class TransactionPoolService {
 
     private static final Logger logger = LoggerFactory.getLogger(TransactionPoolService.class);
-    // Cola concurrente para almacenar las transacciones pendientes en memoria
-    private final Queue<Transaction> pendingTransactions = new ConcurrentLinkedQueue<>();
+    private static final String PENDING_TX_LIST_KEY = "pending_transactions";
+
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -31,14 +34,20 @@ public class TransactionPoolService {
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        Gauge.builder("mining.transactions.pending", pendingTransactions, Queue::size)
+        Gauge.builder("mining.transactions.pending", this, TransactionPoolService::getPendingTransactionCount)
                 .description("Transacciones pendientes en el pool")
                 .register(meterRegistry);
     }
 
-     // Agrega una nueva transacción al pool de transacciones pendientes en memoria y la almacena en Redis.
+    // Agrega una nueva transacción a la lista de pendientes en Redis
     public void addTransaction(Transaction transaction) {
-        pendingTransactions.offer(transaction);
+        try {
+            redisTemplate.opsForList().rightPush(PENDING_TX_LIST_KEY, objectMapper.writeValueAsString(transaction));
+        } catch (JsonProcessingException e) {
+            logger.error("Error serializando la transacción para la cola de pendientes: {}", e.getMessage(), e);
+            return;
+        }
+
         String transactionIdKey = "transactions:" + transaction.getTimestamp() + ":" + transaction.getSender();
         try {
             Map<String, Object> transactionMap = objectMapper.convertValue(transaction, new TypeReference<Map<String, Object>>() {});
@@ -51,27 +60,46 @@ public class TransactionPoolService {
             try {
                 redisTemplate.opsForValue().set(transactionIdKey, objectMapper.writeValueAsString(transaction));
             } catch (Exception jsonE) {
+                // best-effort, no rompe el flujo principal
             }
         }
     }
-    
-    // Obtiene un número específico de transacciones pendientes del pool en memoria.
-    // Las transacciones se eliminan del pool una vez que se obtienen, para ser incluidas en un bloque.
+
+    // Obtiene y remueve hasta 'count' transacciones pendientes de Redis.
     public List<Transaction> getPendingTransactions(int count) {
-        if (pendingTransactions.isEmpty() || count <= 0) return Collections.emptyList();
-        List<Transaction> transactionsToProcess = new ArrayList<>();
-        // Extrae transacciones del pool hasta alcanzar el conteo o el pool esté vacío
-        for (int i = 0; i < count && !pendingTransactions.isEmpty(); i++) {
-            transactionsToProcess.add(pendingTransactions.poll());
+        if (count <= 0) return Collections.emptyList();
+        List<Transaction> result = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String raw = redisTemplate.opsForList().leftPop(PENDING_TX_LIST_KEY);
+            if (raw == null) break; // la lista quedó vacía
+            Transaction tx = deserialize(raw);
+            if (tx != null) result.add(tx);
         }
-        return transactionsToProcess;
+        return result;
     }
 
     public int getPendingTransactionCount() {
-        return pendingTransactions.size();
+        Long size = redisTemplate.opsForList().size(PENDING_TX_LIST_KEY);
+        return size != null ? size.intValue() : 0;
     }
 
     public List<Transaction> getAllPendingTransactions() {
-        return new ArrayList<>(pendingTransactions);
+        List<String> raw = redisTemplate.opsForList().range(PENDING_TX_LIST_KEY, 0, -1);
+        if (raw == null) return Collections.emptyList();
+        List<Transaction> result = new ArrayList<>();
+        for (String s : raw) {
+            Transaction tx = deserialize(s);
+            if (tx != null) result.add(tx);
+        }
+        return result;
+    }
+
+    private Transaction deserialize(String raw) {
+        try {
+            return objectMapper.readValue(raw, Transaction.class);
+        } catch (JsonProcessingException e) {
+            logger.error("Error deserializando transacción pendiente desde Redis: {}", e.getMessage(), e);
+            return null;
+        }
     }
 }

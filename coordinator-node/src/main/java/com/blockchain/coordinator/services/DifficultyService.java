@@ -12,13 +12,13 @@ import org.springframework.stereotype.Service;
 public class DifficultyService {
 
     private static final Logger logger = LoggerFactory.getLogger(DifficultyService.class);
-    
+
     private final RedisTemplate<String, String> redisTemplate;
 
     private static final String CURRENT_SYSTEM_CHALLENGE_KEY = "current_system_challenge";
     private final String defaultHashChallenge;
 
-    private String currentSystemChallenge;
+    private volatile String cachedChallenge;
 
     public DifficultyService(
             RedisTemplate<String, String> redisTemplate,
@@ -34,37 +34,49 @@ public class DifficultyService {
     public void loadCurrentSystemChallenge() {
         String loadedChallenge = redisTemplate.opsForValue().get(CURRENT_SYSTEM_CHALLENGE_KEY);
         if (loadedChallenge != null && !loadedChallenge.isEmpty()) {
-            this.currentSystemChallenge = loadedChallenge;
-            logger.info("DifficultyService: Dificultad del sistema cargada desde Redis: " + currentSystemChallenge);
+            this.cachedChallenge = loadedChallenge;
+            logger.info("DifficultyService: Dificultad del sistema cargada desde Redis: {}", cachedChallenge);
         } else {
-            this.currentSystemChallenge = defaultHashChallenge;
-            saveCurrentSystemChallenge();
-            logger.info("DifficultyService: No se encontró dificultad del sistema en Redis. Usando por defecto: " + defaultHashChallenge);
+            this.cachedChallenge = defaultHashChallenge;
+            saveCurrentSystemChallenge(this.cachedChallenge);
+            logger.info("DifficultyService: No se encontró dificultad del sistema en Redis. Usando por defecto: {}", defaultHashChallenge);
         }
     }
 
-    private void saveCurrentSystemChallenge() {
-        redisTemplate.opsForValue().set(CURRENT_SYSTEM_CHALLENGE_KEY, this.currentSystemChallenge);
-        logger.info("DifficultyService: Dificultad del sistema guardada en Redis: " + this.currentSystemChallenge);
+    private void saveCurrentSystemChallenge(String challenge) {
+        redisTemplate.opsForValue().set(CURRENT_SYSTEM_CHALLENGE_KEY, challenge);
+        logger.info("DifficultyService: Dificultad del sistema guardada en Redis: {}", challenge);
     }
 
     public void setCurrentChallenge(String newChallenge) {
-        this.currentSystemChallenge = newChallenge;
-        saveCurrentSystemChallenge();
-        logger.info("DifficultyService: Dificultad del sistema establecida: " + newChallenge);
+        this.cachedChallenge = newChallenge;
+        saveCurrentSystemChallenge(newChallenge);
+        logger.info("DifficultyService: Dificultad del sistema establecida: {}", newChallenge);
     }
 
-    public void decrementChallenge() {
-        if (currentSystemChallenge.length() > 0) {
-            this.currentSystemChallenge = currentSystemChallenge.substring(0, currentSystemChallenge.length() - 1);
-            saveCurrentSystemChallenge();
-            logger.info("DifficultyService: Dificultad del sistema decrementada. Nuevo challenge: " + currentSystemChallenge);
+    public synchronized void decrementChallenge() {
+        String current = getCurrentChallenge();
+        if (current.length() > 0) {
+            String decremented = current.substring(0, current.length() - 1);
+            setCurrentChallenge(decremented);
+            logger.info("DifficultyService: Dificultad del sistema decrementada. Nuevo challenge: {}", decremented);
         } else {
             logger.warn("DifficultyService: No se puede decrementar más la dificultad. Ya no hay ceros en el challenge.");
         }
     }
 
+    // Lee siempre de Redis primero.
+    // Si Redis no responde, cae al último valor conocido localmente.
     public String getCurrentChallenge() {
-        return this.currentSystemChallenge;
+        try {
+            String fromRedis = redisTemplate.opsForValue().get(CURRENT_SYSTEM_CHALLENGE_KEY);
+            if (fromRedis != null && !fromRedis.isEmpty()) {
+                this.cachedChallenge = fromRedis;
+                return fromRedis;
+            }
+        } catch (Exception e) {
+            logger.warn("DifficultyService: no se pudo leer la dificultad desde Redis, usando cache local: {}", e.getMessage());
+        }
+        return this.cachedChallenge != null ? this.cachedChallenge : defaultHashChallenge;
     }
 }

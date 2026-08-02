@@ -10,14 +10,20 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.time.Duration;
 
 @Component("blockchainTaskScheduler")
 @RequiredArgsConstructor
 public class TaskScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(TaskScheduler.class);
+    private static final String SCHEDULER_LOCK_KEY = "scheduler:task-publication-lock";
+    private static final Duration SCHEDULER_LOCK_TTL = Duration.ofSeconds(8);
+
     private final BlockService blockService;
     private final MiningTaskNotifier miningTaskNotifier;
     private final CurrentMiningTaskService currentMiningTaskService;
@@ -25,6 +31,7 @@ public class TaskScheduler {
     private final TransactionPoolService transactionPoolService;
     private final DifficultyService difficultyService;
     private final MeterRegistry meterRegistry;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @Value("${blockchain.mining.max-transactions-per-block}")
     private int maxTransactionsPerBlock;
@@ -35,6 +42,20 @@ public class TaskScheduler {
 
     @Scheduled(cron = "${blockchain.mining.task-publication-cron}")
     public void createAndPublishMiningTask() {
+        Boolean acquiredLock = redisTemplate.opsForValue().setIfAbsent(SCHEDULER_LOCK_KEY, "1", SCHEDULER_LOCK_TTL);
+        if (acquiredLock == null || !acquiredLock) {
+            logger.debug("Scheduler: otra réplica ya está procesando este ciclo, se omite.");
+            return;
+        }
+
+        try {
+            runSchedulerCycle();
+        } finally {
+            redisTemplate.delete(SCHEDULER_LOCK_KEY);
+        }
+    }
+
+    private void runSchedulerCycle() {
         MiningTask prevTask = currentMiningTaskService.getCurrentTask();
         boolean coordinatorHasActiveMiningTask = (prevTask != null);
 

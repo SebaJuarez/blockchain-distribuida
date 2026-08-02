@@ -166,8 +166,8 @@ public class BlockService {
             return Optional.empty();
         }
 
-        if (!currentTask.getBlock().getPrevious_hash().equals(this.latestBlockHash)) {
-            logger.error("BlockService: El hash previo del bloque minado ({}) no coincide con el bloque actual ({}). Posible bifurcación.", currentTask.getBlock().getPrevious_hash(), this.latestBlockHash);
+        if (!currentTask.getBlock().getPrevious_hash().equals(getLatestBlockHash())) {
+            logger.error("BlockService: El hash previo del bloque minado ({}) no coincide con el bloque actual ({}). Posible bifurcación.", currentTask.getBlock().getPrevious_hash(), getLatestBlockHash());
             redisTemplate.delete(previousHashLockKey);
             return Optional.empty();
         }
@@ -205,7 +205,10 @@ public class BlockService {
     }
 
     public double createRewardBlock(String minerId) {
-        double reward = rewardService.calculateReward(latestBlock.getIndex() + 1);
+        Block currentLatestBlock = getLatestBlock();
+        String currentLatestBlockHash = getLatestBlockHash();
+
+        double reward = rewardService.calculateReward(currentLatestBlock.getIndex() + 1);
 
         if (reward <= 0 && blockchainConfig.isGenesisReward()) {
             logger.info("BlockService: Fondos agotados. No se genera recompensa para {}", minerId);
@@ -224,7 +227,7 @@ public class BlockService {
         List<Transaction> blockTransactions = Collections.singletonList(
                 new Transaction(rewardSender, minerId, reward)
         );
-        Block recompenseBlock = new Block(latestBlock.getIndex() + 1, latestBlockHash, blockTransactions, blockTimestamp, 0, "");
+        Block recompenseBlock = new Block(currentLatestBlock.getIndex() + 1, currentLatestBlockHash, blockTransactions, blockTimestamp, 0, "");
         recompenseBlock.setHash(calculateFinalBlockHash(recompenseBlock));
         blockRepository.save(recompenseBlock);
         redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, recompenseBlock.getHash(), recompenseBlock.getTimestamp());
@@ -245,11 +248,27 @@ public class BlockService {
     }
 
     public String getLatestBlockHash() {
-        return latestBlockHash;
+        try {
+            Set<String> top = redisTemplate.opsForZSet().reverseRange(BLOCK_HASHES_ZSET_KEY, 0, 0);
+            if (top != null && !top.isEmpty()) {
+                String freshHash = top.iterator().next();
+                this.latestBlockHash = freshHash;
+                return freshHash;
+            }
+        } catch (Exception e) {
+            logger.warn("BlockService: no se pudo leer el último hash desde Redis, usando cache local: {}", e.getMessage());
+        }
+        return this.latestBlockHash;
     }
 
     public Block getLatestBlock() {
-        return latestBlock;
+        String hash = getLatestBlockHash();
+        Optional<Block> fresh = blockRepository.findById(hash);
+        if (fresh.isPresent()) {
+            this.latestBlock = fresh.get();
+            return this.latestBlock;
+        }
+        return this.latestBlock;
     }
 
     private String applyMd5(String input) {
