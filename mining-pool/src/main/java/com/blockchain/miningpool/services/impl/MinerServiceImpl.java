@@ -8,7 +8,10 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -18,14 +21,19 @@ import com.blockchain.miningpool.util.EcUtils;
 public class MinerServiceImpl implements MinerService {
 
     private static final Logger logger = LoggerFactory.getLogger(MinerServiceImpl.class);
-    private Integer lastTargetSize = null;
+    private static final String MIG_TARGET_SIZE_KEY = "pool:mig-target-size";
+    private static final String MIG_RESIZE_LOCK_KEY = "pool:mig-resize-lock";
+    private static final Duration MIG_RESIZE_LOCK_TTL = java.time.Duration.ofSeconds(10);
+
     private final MinersRepository minersRepository;
     private final MinerScalerService minerScaler;
+    private final RedisTemplate<String, String> redisTemplate;
 
     public MinerServiceImpl(MinersRepository minersRepository, MinerScalerService minerScaler,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry, RedisTemplate<String, String> redisTemplate) {
         this.minersRepository = minersRepository;
         this.minerScaler = minerScaler;
+        this.redisTemplate = redisTemplate;
 
         Gauge.builder("mining.pool.miners", this, MinerServiceImpl::getMinersCount)
                 .tag("type", "total").register(meterRegistry);
@@ -51,7 +59,7 @@ public class MinerServiceImpl implements MinerService {
     public boolean updateKeepAlive(String minerId) {
 
         if (minerId == null || minerId.trim().isEmpty()) {
-            logger.warn("Id del minero es nulo.");
+            logger.warn("MinerService: Id del minero es nulo.");
             return false;
         }
 
@@ -76,25 +84,36 @@ public class MinerServiceImpl implements MinerService {
     @Override
     public void checkKeepAliveMiners(long keepAliveTimeout) {
         Instant cutoff = Instant.now().minusMillis(keepAliveTimeout);
-        // 1) Borrar los miners pasados de cutoff
         minersRepository.findAll().forEach(miner -> {
             if (miner.getLastTimestamp().isBefore(cutoff)) {
                 minersRepository.delete(miner);
-                logger.info("Miner {} fue borrado tras {}ms sin keep-alive", miner.getPublicKey(), keepAliveTimeout);
+                logger.info("MinerService: Miner {} fue borrado tras {}ms sin keep-alive", miner.getPublicKey(), keepAliveTimeout);
             }
         });
-        // 2) Contar cuántos quedaron
+
         long remaining = minersRepository.count();
         int targetSize = (remaining == 0) ? 5 : 0;
-        logger.debug("Miners vivos: {}. Estado deseado MIG: {}", remaining, targetSize);
-        // 3) Si el estado no cambió, no hago nada
+        logger.debug("MinerService: Miners vivos: {}. Estado deseado MIG: {}", remaining, targetSize);
+
+        String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
+        Integer lastTargetSize = lastTargetSizeStr != null ? Integer.valueOf(lastTargetSizeStr) : null;
+
         if (lastTargetSize != null && lastTargetSize == targetSize) {
-            logger.debug("Ya estaba en {}, no se vuelve a escalar.", targetSize);
+            logger.debug("MinerService: Ya estaba en {}, no se vuelve a escalar.", targetSize);
             return;
         }
-        // 4) Ajustar tamaño del MIG y actualizar flag
-        minerScaler.resize(targetSize);
-        lastTargetSize = targetSize;
+
+        Boolean acquiredLock = redisTemplate.opsForValue().setIfAbsent(MIG_RESIZE_LOCK_KEY, "1", MIG_RESIZE_LOCK_TTL);
+        if (acquiredLock == null || !acquiredLock) {
+            logger.debug("MinerService: Otra réplica ya está aplicando el resize del MIG, se omite este ciclo.");
+            return;
+        }
+        try {
+            minerScaler.resize(targetSize);
+            redisTemplate.opsForValue().set(MIG_TARGET_SIZE_KEY, String.valueOf(targetSize));
+        } finally {
+            redisTemplate.delete(MIG_RESIZE_LOCK_KEY);
+        }
     }
 
     @Override
