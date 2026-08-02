@@ -14,6 +14,11 @@ spec:
       labels:
         app: redis
     spec:
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "infra"
+          effect: "NoSchedule"
       # --- SEGMENTACIÓN ---
       nodeSelector:
         role: "infra"
@@ -43,6 +48,10 @@ spec:
               memory: "256Mi"
               cpu: "300m"
           # ---------------------------
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
           volumeMounts:
             - name: redis-data
               mountPath: /data

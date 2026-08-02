@@ -45,3 +45,7 @@ spec:
                 name: coordinador-config
             - secretRef:
                 name: coordinador-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
