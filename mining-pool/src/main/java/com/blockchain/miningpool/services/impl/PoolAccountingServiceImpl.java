@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +21,8 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
     private static final Logger logger = LoggerFactory.getLogger(PoolAccountingServiceImpl.class);
     private static final String SHARE_PREFIX = "shares:";
     private static final String SHARE_TOTAL_KEY = "shares:total";
+    private static final String DISTRIBUTION_LOCK_KEY = "shares:distribution-lock";
+    private static final Duration DISTRIBUTION_LOCK_TTL = Duration.ofSeconds(10);
 
     private final RedisTemplate<String, String> redisTemplate;
     private final PoolBalanceRepository poolBalanceRepository;
@@ -36,7 +39,21 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
     }
 
     @Override
-    public synchronized void distributeReward(double totalReward) {
+    public void distributeReward(double totalReward) {
+        Boolean acquiredLock = redisTemplate.opsForValue().setIfAbsent(DISTRIBUTION_LOCK_KEY, "1", DISTRIBUTION_LOCK_TTL);
+        if (acquiredLock == null || !acquiredLock) {
+            logger.debug("PoolAccountingService: otra réplica ya está repartiendo la recompensa, se omite.");
+            return;
+        }
+
+        try {
+            doDistributeReward(totalReward);
+        } finally {
+            redisTemplate.delete(DISTRIBUTION_LOCK_KEY);
+        }
+    }
+
+    private void doDistributeReward(double totalReward) {
         Set<String> shareKeys = redisTemplate.keys(SHARE_PREFIX + "*");
         if (shareKeys == null || shareKeys.isEmpty()) {
             logger.warn("PoolAccountingService: bloque ganado pero sin shares registrados. " +
