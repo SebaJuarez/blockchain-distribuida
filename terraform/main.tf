@@ -235,6 +235,11 @@ resource "google_container_cluster" "primary" {
     disk_type    = var.disk_type
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
+
+  cluster_autoscaling {
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+  }
+
 }
 
 resource "google_container_node_pool" "infra" {
@@ -252,6 +257,11 @@ resource "google_container_node_pool" "infra" {
   autoscaling {
     min_node_count = var.node_count
     max_node_count = var.node_count * 2
+  }
+  taint {
+    key    = "workload"
+    value  = "infra"
+    effect = "NO_SCHEDULE"
   }
 }
 
