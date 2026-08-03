@@ -1,28 +1,37 @@
 import { api } from '../services/api.js';
-import { createEl, truncateHash, copyToClipboard, createLoadingSpinner, generateRandomAddress, shortenId } from '../utils/dom.js';
-import { signTransaction, getWalletAddress } from '../utils/crypto.js';
+import { render, html } from '../lib/preact-standalone.js';
+import { shortenId, copyToClipboard, generateRandomAddress, showToast } from '../utils/dom.js';
+import { signTransaction, getWalletAddress, listWallets, addWallet, switchWallet, removeWallet, generateNewWallet } from '../utils/crypto.js';
+import { spinner, errorBox, sectionTitle } from '../utils/ui.js';
+
+const POLL_INTERVAL_MS = 5000;
+const MASS_DELAYS = [['0', 'Sin espera'], ['100', '100 ms'], ['250', '250 ms'], ['500', '500 ms'], ['1000', '1 s'], ['2000', '2 s'], ['5000', '5 s']];
 
 export async function transactions(root) {
-    root.innerHTML = '';
-    root.appendChild(createLoadingSpinner());
+    if (root._txPollTimer) {
+        clearInterval(root._txPollTimer);
+        root._txPollTimer = null;
+    }
+
+    render(spinner(), root);
 
     let currentDifficulty = 'Cargando...';
     let myBalance = 0;
     let systemConfig = {};
+    let pendingTransactions = [];
+    let isTesting = false;
+    let isGenesis = false;
+    let walletAddress = getWalletAddress();
 
     async function updateDifficultyDisplay() {
-        const difficultyDisplayEl = document.getElementById('current-difficulty-display');
-        if (difficultyDisplayEl) {
-            difficultyDisplayEl.textContent = 'Cargando...';
-        }
         try {
             currentDifficulty = await api.getDifficulty();
-            if (difficultyDisplayEl) difficultyDisplayEl.textContent = currentDifficulty || 'N/A';
         } catch (error) {
             console.error('Error al obtener la dificultad:', error);
             currentDifficulty = 'Error';
-            if (difficultyDisplayEl) difficultyDisplayEl.textContent = 'Error al cargar';
         }
+        const el = document.getElementById('current-difficulty-display');
+        if (el) el.textContent = currentDifficulty || 'N/A';
     }
 
     async function refreshBalance() {
@@ -36,332 +45,580 @@ export async function transactions(root) {
         }
     }
 
+    function updateWalletHeader() {
+        walletAddress = getWalletAddress();
+        const el = document.getElementById('wallet-address-display');
+        if (el) {
+            el.textContent = shortenId(walletAddress, 12, 8);
+            el.title = walletAddress;
+        }
+        refreshBalance();
+    }
+
+    // ---- Wallet Modal ----
+    function renderWalletModal(modalRoot) {
+        const wallets = listWallets();
+
+        render(html`
+            <div class="space-y-2 max-h-64 overflow-y-auto pr-1 mb-4">
+                ${wallets.length === 0
+                    ? html`<p class="text-gray-500 italic text-sm">No hay wallets guardadas.</p>`
+                    : wallets.map(w => html`
+                        <div class="flex items-center justify-between p-3 rounded-lg border ${w.active ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}">
+                            <div class="min-w-0">
+                                <div class="flex items-center space-x-2">
+                                    <span class="font-semibold text-sm">${w.name}</span>
+                                    ${w.active ? html`<span class="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full font-bold">ACTIVA</span>` : ''}
+                                </div>
+                                <div class="flex items-center space-x-1 mt-1">
+                                    <span class="font-mono text-xs text-gray-500" title="${w.publicKeyHex}">${shortenId(w.publicKeyHex, 10, 8)}</span>
+                                    <button class="text-gray-400 hover:text-gray-600" title="Copiar dirección"
+                                            onClick=${() => copyToClipboard(w.publicKeyHex)}><i class="fas fa-copy text-xs"></i></button>
+                                    <button class="text-gray-400 hover:text-gray-600" title="Copiar clave privada"
+                                            onClick=${() => copyToClipboard(w.privHex)}><i class="fas fa-key text-xs"></i></button>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2 flex-shrink-0">
+                                ${!w.active ? html`
+                                    <button class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+                                            onClick=${() => {
+                                                switchWallet(w.id);
+                                                renderWalletModal(modalRoot);
+                                                updateWalletHeader();
+                                                showToast(`Wallet "${w.name}" activada`, 'success');
+                                            }}>Usar</button>` : ''}
+                                ${wallets.length > 1 ? html`
+                                    <button class="px-3 py-1 bg-red-100 text-red-600 text-xs rounded-lg hover:bg-red-200"
+                                            title="Eliminar wallet"
+                                            onClick=${() => {
+                                                if (w.active) {
+                                                    showToast('No se puede borrar la wallet activa. Cambiá primero.', 'warning');
+                                                    return;
+                                                }
+                                                removeWallet(w.id);
+                                                renderWalletModal(modalRoot);
+                                                showToast(`Wallet "${w.name}" eliminada`, 'info');
+                                            }}>
+                                        <i class="fas fa-trash"></i>
+                                    </button>` : ''}
+                            </div>
+                        </div>
+                    `)}
+            </div>
+
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Agregar wallet con clave privada</label>
+                <div class="flex space-x-2">
+                    <input id="wallet-add-pk" type="text" placeholder="Clave privada (hex)"
+                           class="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500" />
+                    <input id="wallet-add-name" type="text" placeholder="Nombre (opcional)" class="w-32 p-2 border border-gray-300 rounded-lg text-sm" />
+                    <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm"
+                            onClick=${() => {
+                                const pkInput = document.getElementById('wallet-add-pk');
+                                const nameInput = document.getElementById('wallet-add-name');
+                                try {
+                                    const wallet = addWallet(pkInput.value, nameInput.value);
+                                    pkInput.value = '';
+                                    nameInput.value = '';
+                                    renderWalletModal(modalRoot);
+                                    updateWalletHeader();
+                                    showToast(`Wallet "${wallet.name}" activada`, 'success');
+                                } catch (err) {
+                                    showToast(err.message, 'error');
+                                }
+                            }}>Agregar y usar</button>
+                </div>
+            </div>
+
+            <button class="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold text-sm mb-3"
+                    onClick=${() => {
+                        const wallet = generateNewWallet();
+                        renderWalletModal(modalRoot);
+                        updateWalletHeader();
+                        showToast(`Nueva wallet "${wallet.name}" generada y activada`, 'success');
+                    }}>
+                <i class="fas fa-plus mr-1"></i>Generar nueva wallet
+            </button>
+
+            <p class="text-xs text-gray-400">Las claves se guardan solo en este navegador (localStorage). No compartas tu clave privada.</p>
+        `, modalRoot);
+    }
+
+    function openWalletModal() {
+        const overlay = createOverlay();
+        const modalRoot = document.createElement('div');
+        overlay.querySelector('.modal-body').append(modalRoot);
+        renderWalletModal(modalRoot);
+    }
+
+    function createOverlay() {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50 p-4';
+        const modal = document.createElement('div');
+        modal.className = 'bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[85vh] overflow-y-auto';
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between mb-4';
+        header.innerHTML = '<h3 class="text-xl font-bold text-gray-900">Cambiar Wallet</h3>';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'p-2 text-gray-500 hover:text-gray-700';
+        closeBtn.innerHTML = '<i class="fas fa-times text-xl"></i>';
+        closeBtn.addEventListener('click', () => overlay.remove());
+        header.append(closeBtn);
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+        modal.append(header, body);
+        overlay.append(modal);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        document.body.append(overlay);
+        return overlay;
+    }
+
+    // ---- Pending list ----
+    function renderPendingList(container) {
+        render(html`
+            ${pendingTransactions.length === 0
+                ? html`<p class="text-gray-500 italic text-center py-4">No hay transacciones pendientes.</p>`
+                : html`
+                    <div class="table-responsive">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remitente</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Receptor</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Monto</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                ${pendingTransactions.map(tx => html`
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-2 font-mono text-xs text-blue-600">
+                                            <a href="#transactions/${tx.id}" class="hover:underline" title="${tx.id}">${shortenId(tx.id, 6, 4)}</a>
+                                        </td>
+                                        <td class="px-4 py-2 font-mono text-xs" title="${tx.sender}">${shortenId(tx.sender, 6, 4)}</td>
+                                        <td class="px-4 py-2 font-mono text-xs" title="${tx.receiver}">${shortenId(tx.receiver, 6, 4)}</td>
+                                        <td class="px-4 py-2 font-semibold">${tx.amount.toLocaleString()}</td>
+                                        <td class="px-4 py-2 text-gray-500 text-xs">${new Date(tx.timestamp * 1000).toLocaleTimeString()}</td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>`}
+        `, container);
+    }
+
+    async function refreshPendingList() {
+        if (document.hidden) return;
+        try {
+            const txData = await api.txs();
+            pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
+            const container = document.getElementById('pending-tx-table-container');
+            const countEl = document.getElementById('pending-tx-count');
+            if (countEl) countEl.textContent = `Transacciones Pendientes (${pendingTransactions.length})`;
+            if (container) renderPendingList(container);
+        } catch (e) {
+            console.error('Error refrescando transacciones pendientes:', e);
+        }
+    }
+
+    // ---- Mass Generator ----
+    function buildMassGenerator() {
+        let cancelFlag = false;
+
+        const stateEl = () => document.getElementById('mass-status');
+        const fillEl = () => document.getElementById('mass-progress-fill');
+        const progressWrapEl = () => document.getElementById('mass-progress-wrap');
+
+        function setProgress(pct, text) {
+            const fill = fillEl();
+            if (fill) fill.style.width = pct + '%';
+            const status = stateEl();
+            if (status) status.textContent = text;
+        }
+
+        function setRunning(running) {
+            const startBtn = document.getElementById('mass-start-btn');
+            const cancelBtn = document.getElementById('mass-cancel-btn');
+            if (startBtn) {
+                startBtn.disabled = running;
+                startBtn.innerHTML = running
+                    ? '<i class="fas fa-spinner fa-spin mr-1"></i> Enviando...'
+                    : '<i class="fas fa-play mr-1"></i> Generar y Enviar';
+            }
+            if (cancelBtn) cancelBtn.classList.toggle('hidden', !running);
+        }
+
+        async function runGenerator() {
+            const n = Math.min(5000, Math.max(1, parseInt(document.getElementById('mass-count').value, 10) || 1));
+            const delay = parseInt(document.getElementById('mass-delay').value, 10) || 0;
+            const destMode = document.getElementById('mass-dest-mode').value;
+            const fixedDest = document.getElementById('mass-dest-fixed').value.trim();
+            const amountMode = document.getElementById('mass-amount-mode').value;
+            const fixedAmount = parseFloat(document.getElementById('mass-amount-fixed').value);
+
+            if (destMode === 'fixed' && !fixedDest) {
+                showToast('Ingresá un destinatario fijo o usá "aleatorio".', 'warning');
+                return;
+            }
+            if (amountMode === 'fixed' && (!fixedAmount || fixedAmount <= 0)) {
+                showToast('Ingresá un monto fijo válido.', 'warning');
+                return;
+            }
+
+            cancelFlag = false;
+            setRunning(true);
+            const wrap = progressWrapEl();
+            if (wrap) wrap.classList.remove('hidden');
+            setProgress(0, `Preparando 0/${n}...`);
+
+            let sent = 0, failed = 0;
+            for (let i = 1; i <= n; i++) {
+                if (cancelFlag) break;
+                const receiver = destMode === 'fixed' ? fixedDest : generateRandomAddress();
+                const amount = amountMode === 'fixed' ? fixedAmount : Math.floor(Math.random() * 100) + 1;
+                try {
+                    const signed = await signTransaction(receiver, amount);
+                    await api.createTx(signed);
+                    sent++;
+                } catch (err) {
+                    failed++;
+                    console.error('Error en TX masiva:', err);
+                }
+                setProgress(Math.round((i / n) * 100), `${i}/${n} procesadas · ${sent} enviadas · ${failed} errores${cancelFlag ? ' (cancelado)' : ''}`);
+                if (i < n && delay > 0) await new Promise(r => setTimeout(r, delay));
+            }
+
+            setRunning(false);
+            setProgress(100, `${sent} enviadas · ${failed} errores${cancelFlag ? ' (cancelado)' : ''}`);
+            showToast(
+                cancelFlag
+                    ? `Cancelado: ${sent} enviadas, ${failed} errores`
+                    : `Batch completado: ${sent} enviadas, ${failed} errores`,
+                failed > 0 ? 'warning' : 'success'
+            );
+            setTimeout(() => { const wrap = progressWrapEl(); if (wrap) wrap.classList.add('hidden'); }, 3000);
+            refreshPendingList();
+        }
+
+        return html`
+            <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                ${sectionTitle('Generador Masivo de Transacciones')}
+                <p class="text-sm text-gray-600 mb-4">
+                    Envía muchas transacciones de a una con una espera configurable entre cada una, ideal para pruebas de carga sin saturar la red.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad</label>
+                        <input id="mass-count" type="number" value="10" min="1" max="5000" class="w-full p-2 border border-gray-300 rounded-lg" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Espera entre TXs</label>
+                        <select id="mass-delay" class="w-full p-2 border border-gray-300 rounded-lg bg-white">
+                            ${MASS_DELAYS.map(([value, label]) => html`
+                                <option value="${value}" ${value === '250' ? 'selected' : ''}>${label}</option>`)}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Destino</label>
+                        <select id="mass-dest-mode" class="w-full p-2 border border-gray-300 rounded-lg bg-white mb-1">
+                            <option value="random">Aleatorio</option>
+                            <option value="fixed">Fijo</option>
+                        </select>
+                        <input id="mass-dest-fixed" type="text" placeholder="Public key fija"
+                               class="w-full p-2 border border-gray-300 rounded-lg font-mono text-xs" style="display:none" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Monto</label>
+                        <select id="mass-amount-mode" class="w-full p-2 border border-gray-300 rounded-lg bg-white mb-1">
+                            <option value="random">Aleatorio (1-100)</option>
+                            <option value="fixed">Fijo</option>
+                        </select>
+                        <input id="mass-amount-fixed" type="number" min="0.01" step="0.01" placeholder="Monto fijo"
+                               class="w-full p-2 border border-gray-300 rounded-lg" style="display:none" />
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 mb-2">
+                    <button id="mass-start-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+                            onClick=${runGenerator}><i class="fas fa-play mr-1"></i>Generar y Enviar</button>
+                    <button id="mass-cancel-btn" class="hidden px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold"
+                            onClick=${() => { cancelFlag = true; }}><i class="fas fa-stop mr-1"></i>Cancelar</button>
+                </div>
+                <div id="mass-progress-wrap" class="hidden mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div id="mass-progress-fill" class="bg-blue-600 h-3 rounded-full transition-all duration-200" style="width:0%"></div>
+                    </div>
+                    <div id="mass-status" class="text-sm text-gray-600 mt-1"></div>
+                </div>
+            </div>`;
+    }
+
+    // Toggle de campos fijos (event delegation sobre el documento es frágil, se conectan post-render)
+    function wireFixedToggles() {
+        const destMode = document.getElementById('mass-dest-mode');
+        const destFixed = document.getElementById('mass-dest-fixed');
+        const amountMode = document.getElementById('mass-amount-mode');
+        const amountFixed = document.getElementById('mass-amount-fixed');
+        if (destMode) destMode.addEventListener('change', () => { destFixed.style.display = destMode.value === 'fixed' ? '' : 'none'; });
+        if (amountMode) amountMode.addEventListener('change', () => { amountFixed.style.display = amountMode.value === 'fixed' ? '' : 'none'; });
+    }
+
+    // ---- Balance by Public Key ----
+    function buildBalanceCheck() {
+        return html`
+            <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                ${sectionTitle('Consultar Balance de una Cuenta')}
+                <p class="text-sm text-gray-600 mb-3">Ingresá una public key para ver su saldo en la red.</p>
+                <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
+                    <input id="balance-pk-input" type="text" placeholder="Public Key (ej: 04a1b2...) o SYSTEM_GENESIS"
+                           class="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm" />
+                    <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+                            onClick=${async () => {
+                                const pk = document.getElementById('balance-pk-input').value.trim();
+                                if (!pk) { showToast('Ingresá una public key.', 'warning'); return; }
+                                const resultBox = document.getElementById('balance-check-result');
+                                render(spinner(), resultBox);
+                                try {
+                                    const res = await api.getBalance(pk);
+                                    const balance = Number(res.balance || 0);
+                                    render(html`
+                                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+                                            <div>
+                                                <p class="text-xs text-gray-500 uppercase font-bold">Balance</p>
+                                                <p class="text-2xl font-bold text-gray-900">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                <p class="font-mono text-xs text-gray-500 mt-1" title="${pk}">${shortenId(pk, 10, 8)}</p>
+                                            </div>
+                                            <button class="px-3 py-1 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-100"
+                                                    onClick=${() => copyToClipboard(pk)}><i class="fas fa-copy mr-1"></i>Copiar PK</button>
+                                        </div>`, resultBox);
+                                } catch (err) {
+                                    render(html`
+                                        <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 rounded text-sm">
+                                            No se pudo obtener el balance de esa public key. Verificá que exista en la red.
+                                        </div>`, resultBox);
+                                }
+                            }}>Consultar</button>
+                </div>
+                <div class="mt-2">
+                    <button class="text-xs text-blue-600 hover:underline"
+                            onClick=${() => { document.getElementById('balance-pk-input').value = getWalletAddress(); }}>Usar mi wallet activa</button>
+                </div>
+                <div id="balance-check-result" class="mt-3"></div>
+            </div>`;
+    }
+
     try {
         const [txData, configRes] = await Promise.all([
             api.txs(),
             api.config().catch(() => ({}))
         ]);
         systemConfig = configRes;
-        const pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
-        const isTesting = systemConfig.mode === 'testing';
-        const isGenesis = systemConfig.rewardSource === 'genesis';
-
-        root.innerHTML = '';
+        pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
+        isTesting = systemConfig.mode === 'testing';
+        isGenesis = systemConfig.rewardSource === 'genesis';
 
         await refreshBalance();
 
-        // Wallet & Balance Header
-        const walletAddress = getWalletAddress();
-        const headerCard = createEl('div', { className: 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 rounded-xl shadow-lg mb-6' },
-            createEl('div', { className: 'flex flex-col md:flex-row md:items-center md:justify-between' },
-                createEl('div', {},
-                    createEl('h2', { className: 'text-2xl font-bold mb-1' }, 'Tu Wallet'),
-                    createEl('div', { className: 'flex items-center space-x-2 text-blue-100' },
-                        createEl('span', { className: 'font-mono text-sm' }, shortenId(walletAddress, 12, 8)),
-                        createEl('button', {
-                            className: 'text-blue-200 hover:text-white transition-colors',
-                            onClick: () => copyToClipboard(walletAddress)
-                        }, createEl('i', { className: 'fas fa-copy' }))
-                    )
-                ),
-                createEl('div', { className: 'mt-4 md:mt-0 text-right' },
-                    createEl('p', { className: 'text-blue-200 text-sm' }, 'Balance Disponible'),
-                    createEl('p', { id: 'my-balance-display', className: 'text-4xl font-bold' },
-                        Number(myBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    ),
-                    createEl('button', {
-                        className: 'mt-2 text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors',
-                        onClick: refreshBalance
-                    }, createEl('i', { className: 'fas fa-sync-alt mr-1' }), 'Actualizar')
-                )
-            )
-        );
+        render(html`
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 rounded-xl shadow-lg mb-6">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">Tu Wallet</h2>
+                        <div class="flex items-center space-x-2 text-blue-100">
+                            <span id="wallet-address-display" class="font-mono text-sm" title="${walletAddress}">${shortenId(walletAddress, 12, 8)}</span>
+                            <button class="text-blue-200 hover:text-white transition-colors" title="Copiar dirección"
+                                    onClick=${() => copyToClipboard(walletAddress)}><i class="fas fa-copy"></i></button>
+                            <button class="text-blue-200 hover:text-white transition-colors flex items-center space-x-1 text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded"
+                                    onClick=${openWalletModal}><i class="fas fa-user-plus"></i><span>Cambiar wallet</span></button>
+                        </div>
+                    </div>
+                    <div class="mt-4 md:mt-0 text-right">
+                        <p class="text-blue-200 text-sm">Balance Disponible</p>
+                        <p id="my-balance-display" class="text-4xl font-bold">${Number(myBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <button class="mt-2 text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors"
+                                onClick=${refreshBalance}><i class="fas fa-sync-alt mr-1"></i>Actualizar</button>
+                    </div>
+                </div>
+            </div>
 
-        // System Status Bar
-        const statusBar = createEl('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4 mb-6' },
-            createEl('div', { className: 'bg-white p-4 rounded-lg shadow flex items-center space-x-3' },
-                createEl('div', { className: `w-3 h-3 rounded-full ${isTesting ? 'bg-orange-400' : 'bg-green-500'}` }),
-                createEl('div', {},
-                    createEl('p', { className: 'text-xs text-gray-500 uppercase font-bold' }, 'Modo'),
-                    createEl('p', { className: 'font-semibold' }, isTesting ? 'Testing' : 'Production')
-                )
-            ),
-            createEl('div', { className: 'bg-white p-4 rounded-lg shadow flex items-center space-x-3' },
-                createEl('i', { className: 'fas fa-coins text-yellow-500' }),
-                createEl('div', {},
-                    createEl('p', { className: 'text-xs text-gray-500 uppercase font-bold' }, 'Fondo Sistema'),
-                    createEl('p', { className: 'font-semibold' }, isGenesis && systemConfig.genesisSupply
-                        ? Number(systemConfig.genesisSupply).toLocaleString()
-                        : '∞')
-                )
-            ),
-            createEl('div', { className: 'bg-white p-4 rounded-lg shadow flex items-center space-x-3' },
-                createEl('i', { className: 'fas fa-shield-alt text-blue-500' }),
-                createEl('div', {},
-                    createEl('p', { className: 'text-xs text-gray-500 uppercase font-bold' }, 'Validación'),
-                    createEl('p', { className: 'font-semibold' }, isTesting ? 'Libre (sin saldo)' : 'Requiere fondos')
-                )
-            )
-        );
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow flex items-center space-x-3">
+                    <div class="w-3 h-3 rounded-full ${isTesting ? 'bg-orange-400' : 'bg-green-500'}"></div>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-bold">Modo</p>
+                        <p class="font-semibold">${isTesting ? 'Testing' : 'Production'}</p>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow flex items-center space-x-3">
+                    <i class="fas fa-coins text-yellow-500"></i>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-bold">Fondo Sistema</p>
+                        <p class="font-semibold">${isGenesis && systemConfig.genesisSupply ? Number(systemConfig.genesisSupply).toLocaleString() : '∞'}</p>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow flex items-center space-x-3">
+                    <i class="fas fa-shield-alt text-blue-500"></i>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase font-bold">Validación</p>
+                        <p class="font-semibold">${isTesting ? 'Libre (sin saldo)' : 'Requiere fondos'}</p>
+                    </div>
+                </div>
+            </div>
 
-        // Faucet Card (Testing only)
-        let faucetCard = null;
-        if (isTesting) {
-            faucetCard = createEl('div', { className: 'bg-orange-50 border-2 border-orange-300 border-dashed p-6 rounded-xl mb-6' },
-                createEl('div', { className: 'flex items-center justify-between' },
-                    createEl('div', {},
-                        createEl('h3', { className: 'text-lg font-bold text-orange-800' }, '🚰 Faucet de Pruebas'),
-                        createEl('p', { className: 'text-sm text-orange-700' }, 'Recarga tu wallet con fondos del sistema para hacer transacciones.')
-                    ),
-                    createEl('div', { className: 'flex space-x-2' },
-                        createEl('button', {
-                            className: 'px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold',
-                            onClick: async (e) => {
-                                const btn = e.target;
-                                btn.disabled = true; btn.textContent = '...';
-                                try {
-                                    const res = await api.faucet({ publicKey: walletAddress, amount: 1000 });
-                                    await refreshBalance();
-                                    btn.textContent = '+1,000 ✓';
-                                    setTimeout(() => { btn.disabled = false; btn.textContent = '+1,000'; }, 1500);
-                                } catch (err) { btn.textContent = 'Error'; setTimeout(() => { btn.disabled = false; btn.textContent = '+1,000'; }, 1500); }
-                            }
-                        }, '+1,000'),
-                        createEl('button', {
-                            className: 'px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-semibold',
-                            onClick: async (e) => {
-                                const btn = e.target;
-                                btn.disabled = true; btn.textContent = '...';
-                                try {
-                                    const res = await api.faucet({ publicKey: walletAddress, amount: 10000 });
-                                    await refreshBalance();
-                                    btn.textContent = '+10,000 ✓';
-                                    setTimeout(() => { btn.disabled = false; btn.textContent = '+10,000'; }, 1500);
-                                } catch (err) { btn.textContent = 'Error'; setTimeout(() => { btn.disabled = false; btn.textContent = '+10,000'; }, 1500); }
-                            }
-                        }, '+10,000')
-                    )
-                )
-            );
-        }
+            ${isTesting ? html`
+                <div class="bg-orange-50 border-2 border-orange-300 border-dashed p-6 rounded-xl mb-6">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                            <h3 class="text-lg font-bold text-orange-800">🚰 Faucet de Pruebas</h3>
+                            <p class="text-sm text-orange-700">Recarga tu wallet con fondos del sistema para hacer transacciones.</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-semibold"
+                                    onClick=${async (e) => {
+                                        const btn = e.target;
+                                        btn.disabled = true; btn.textContent = '...';
+                                        try {
+                                            const res = await api.faucet({ publicKey: walletAddress, amount: 1000 });
+                                            await refreshBalance();
+                                            btn.textContent = '+1,000 ✓';
+                                            showToast(`Cargados ${Number(res.amount).toLocaleString()} a tu wallet`, 'success');
+                                            setTimeout(() => { btn.disabled = false; btn.textContent = '+1,000'; }, 1500);
+                                        } catch (err) { btn.textContent = 'Error'; setTimeout(() => { btn.disabled = false; btn.textContent = '+1,000'; }, 1500); }
+                                    }}>+1,000</button>
+                            <button class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-semibold"
+                                    onClick=${async (e) => {
+                                        const btn = e.target;
+                                        btn.disabled = true; btn.textContent = '...';
+                                        try {
+                                            const res = await api.faucet({ publicKey: walletAddress, amount: 10000 });
+                                            await refreshBalance();
+                                            btn.textContent = '+10,000 ✓';
+                                            showToast(`Cargados ${Number(res.amount).toLocaleString()} a tu wallet`, 'success');
+                                            setTimeout(() => { btn.disabled = false; btn.textContent = '+10,000'; }, 1500);
+                                        } catch (err) { btn.textContent = 'Error'; setTimeout(() => { btn.disabled = false; btn.textContent = '+10,000'; }, 1500); }
+                                    }}>+10,000</button>
+                        </div>
+                    </div>
+                </div>` : ''}
 
-        // Single Transaction Form
-        const singleTxCard = createEl('div', { className: 'bg-white p-6 rounded-xl shadow-md mb-6' },
-            createEl('h3', { className: 'text-xl font-bold text-gray-900 mb-4 border-b pb-2' }, 'Enviar Transacción Individual')
-        );
+            <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                ${sectionTitle('Enviar Transacción Individual')}
+                <form class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end" onSubmit=${async (e) => {
+                    e.preventDefault();
+                    const receiver = document.getElementById('single-tx-receiver').value.trim();
+                    const amount = parseFloat(document.getElementById('single-tx-amount').value);
+                    const btn = e.target.querySelector('button[type="submit"]');
+                    const originalHtml = btn.innerHTML;
+                    const msgBox = document.getElementById('single-tx-msg');
+                    msgBox.innerHTML = '';
 
-        const singleTxForm = createEl('form', { className: 'grid grid-cols-1 md:grid-cols-12 gap-4 items-end' },
-            createEl('div', { className: 'md:col-span-5' },
-                createEl('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, 'Destinatario (Public Key)'),
-                createEl('input', {
-                    id: 'single-tx-receiver',
-                    type: 'text',
-                    className: 'w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm',
-                    placeholder: '04a1b2... o addr123'
-                })
-            ),
-            createEl('div', { className: 'md:col-span-3' },
-                createEl('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, 'Monto'),
-                createEl('input', {
-                    id: 'single-tx-amount',
-                    type: 'number',
-                    step: '0.01',
-                    min: '0.01',
-                    className: 'w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
-                    placeholder: '100.00'
-                })
-            ),
-            createEl('div', { className: 'md:col-span-4 flex space-x-2' },
-                createEl('button', {
-                    type: 'submit',
-                    className: 'flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2'
-                }, createEl('i', { className: 'fas fa-paper-plane' }), createEl('span', {}, 'Enviar')),
-                createEl('button', {
-                    type: 'button',
-                    className: 'px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors',
-                    onClick: () => {
-                        document.getElementById('single-tx-receiver').value = generateRandomAddress();
-                        document.getElementById('single-tx-amount').value = (Math.floor(Math.random() * 100) + 1).toString();
+                    if (!receiver) {
+                        msgBox.append(createNotice('Ingresá un destinatario.', 'bg-yellow-100 border-yellow-400 text-yellow-700'));
+                        return;
                     }
-                }, createEl('i', { className: 'fas fa-dice' }))
-            )
-        );
+                    if (!amount || amount <= 0) {
+                        msgBox.append(createNotice('Ingresá un monto válido.', 'bg-yellow-100 border-yellow-400 text-yellow-700'));
+                        return;
+                    }
+                    if (!isTesting && myBalance < amount) {
+                        msgBox.append(createNotice(`Fondos insuficientes. Tenés ${myBalance.toFixed(2)}, necesitás ${amount.toFixed(2)}.`, 'bg-red-100 border-red-400 text-red-700'));
+                        return;
+                    }
 
-        const singleTxMsg = createEl('div', { id: 'single-tx-msg', className: 'mt-3' });
-
-        singleTxForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const receiver = document.getElementById('single-tx-receiver').value.trim();
-            const amount = parseFloat(document.getElementById('single-tx-amount').value);
-            const btn = singleTxForm.querySelector('button[type="submit"]');
-            const originalHtml = btn.innerHTML;
-
-            singleTxMsg.innerHTML = '';
-
-            if (!receiver) {
-                singleTxMsg.append(createEl('div', { className: 'bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 rounded text-sm' }, 'Ingresá un destinatario.'));
-                return;
-            }
-            if (!amount || amount <= 0) {
-                singleTxMsg.append(createEl('div', { className: 'bg-yellow-100 border border-yellow-400 text-yellow-700 px-3 py-2 rounded text-sm' }, 'Ingresá un monto válido.'));
-                return;
-            }
-            if (!isTesting && myBalance < amount) {
-                singleTxMsg.append(createEl('div', { className: 'bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm' },
-                    `Fondos insuficientes. Tenés ${myBalance.toFixed(2)}, necesitás ${amount.toFixed(2)}.`
-                ));
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando...';
-
-            try {
-                const signed = await signTransaction(receiver, amount);
-                await api.createTx(signed);
-                await refreshBalance();
-                singleTxMsg.append(createEl('div', { className: 'bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded text-sm' }, '¡Transacción enviada!'));
-                document.getElementById('single-tx-receiver').value = '';
-                document.getElementById('single-tx-amount').value = '';
-                setTimeout(() => transactions(root), 2000);
-            } catch (err) {
-                singleTxMsg.append(createEl('div', { className: 'bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm' }, `Error: ${err.message || 'Rechazada'}`));
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-            }
-        });
-
-        singleTxCard.append(singleTxForm, singleTxMsg);
-
-        // Pending Transactions
-        const listCard = createEl('div', { className: 'bg-white p-6 rounded-xl shadow-md mb-6' },
-            createEl('h2', { className: 'text-xl font-bold text-gray-900 mb-4 border-b pb-2' }, `Transacciones Pendientes (${pendingTransactions.length})`)
-        );
-
-        if (pendingTransactions.length > 0) {
-            const table = createEl('div', { className: 'overflow-x-auto' },
-                createEl('table', { className: 'min-w-full divide-y divide-gray-200 text-sm' },
-                    createEl('thead', { className: 'bg-gray-50' },
-                        createEl('tr', {},
-                            createEl('th', { className: 'px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase' }, 'ID'),
-                            createEl('th', { className: 'px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase' }, 'Remitente'),
-                            createEl('th', { className: 'px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase' }, 'Receptor'),
-                            createEl('th', { className: 'px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase' }, 'Monto'),
-                            createEl('th', { className: 'px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase' }, 'Hora')
-                        )
-                    ),
-                    createEl('tbody', { className: 'bg-white divide-y divide-gray-200' },
-                        ...pendingTransactions.map(tx => createEl('tr', { className: 'hover:bg-gray-50' },
-                            createEl('td', { className: 'px-4 py-2 font-mono text-xs text-blue-600' }, shortenId(tx.id, 6, 4)),
-                            createEl('td', { className: 'px-4 py-2 font-mono text-xs' }, shortenId(tx.sender, 6, 4)),
-                            createEl('td', { className: 'px-4 py-2 font-mono text-xs' }, shortenId(tx.receiver, 6, 4)),
-                            createEl('td', { className: 'px-4 py-2 font-semibold' }, tx.amount.toLocaleString()),
-                            createEl('td', { className: 'px-4 py-2 text-gray-500 text-xs' }, new Date(tx.timestamp * 1000).toLocaleTimeString())
-                        ))
-                    )
-                )
-            );
-            listCard.append(table);
-        } else {
-            listCard.append(createEl('p', { className: 'text-gray-500 italic text-center py-4' }, 'No hay transacciones pendientes.'));
-        }
-
-        // Batch Form (preserved, simplified)
-        const batchCard = createEl('div', { className: 'bg-white p-6 rounded-xl shadow-md mb-6' },
-            createEl('h3', { className: 'text-lg font-bold text-gray-900 mb-3 border-b pb-2' }, 'Enviar Batch de Transacciones'),
-            createEl('p', { className: 'text-sm text-gray-600 mb-3' }, 'Formato: [ {"receiver":"...","amount":10}, ... ]'),
-            createEl('textarea', {
-                id: 'batch-transactions-textarea',
-                className: 'w-full p-3 border border-gray-300 rounded-lg font-mono text-sm mb-3',
-                placeholder: '[ { "receiver": "addr2", "amount": 10 } ]',
-                rows: 4
-            }),
-            createEl('button', {
-                className: 'px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors',
-                onClick: async () => {
-                    const textarea = document.getElementById('batch-transactions-textarea');
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando...';
                     try {
-                        const arr = JSON.parse(textarea.value);
-                        if (!Array.isArray(arr)) throw new Error('Debe ser un array');
-                        const signed = await Promise.all(arr.map(tx => signTransaction(tx.receiver, tx.amount)));
-                        await Promise.all(signed.map(tx => api.createTx(tx)));
-                        textarea.value = '';
-                        alert('Batch enviado correctamente');
-                        transactions(root);
+                        const signed = await signTransaction(receiver, amount);
+                        await api.createTx(signed);
+                        await refreshBalance();
+                        msgBox.append(createNotice('¡Transacción enviada!', 'bg-green-100 border-green-400 text-green-700'));
+                        document.getElementById('single-tx-receiver').value = '';
+                        document.getElementById('single-tx-amount').value = '';
+                        refreshPendingList();
                     } catch (err) {
-                        alert('Error: ' + err.message);
+                        msgBox.append(createNotice(`Error: ${err.message || 'Rechazada'}`, 'bg-red-100 border-red-400 text-red-700'));
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
                     }
-                }
-            }, 'Enviar Batch')
-        );
+                }}>
+                    <div class="md:col-span-5">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Destinatario (Public Key)</label>
+                        <input id="single-tx-receiver" type="text" placeholder="04a1b2... o addr123"
+                               class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm" />
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Monto</label>
+                        <input id="single-tx-amount" type="number" step="0.01" min="0.01" placeholder="100.00"
+                               class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div class="md:col-span-4 flex space-x-2">
+                        <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2">
+                            <i class="fas fa-paper-plane"></i><span>Enviar</span>
+                        </button>
+                        <button type="button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                                title="Generar destinatario y monto aleatorios"
+                                onClick=${() => {
+                                    document.getElementById('single-tx-receiver').value = generateRandomAddress();
+                                    document.getElementById('single-tx-amount').value = (Math.floor(Math.random() * 100) + 1).toString();
+                                }}>
+                            <i class="fas fa-dice"></i>
+                        </button>
+                    </div>
+                </form>
+                <div id="single-tx-msg" class="mt-3"></div>
+            </div>
 
-        // Random Generator
-        const randomCard = createEl('div', { className: 'bg-white p-6 rounded-xl shadow-md mb-6' },
-            createEl('h3', { className: 'text-lg font-bold text-gray-900 mb-3 border-b pb-2' }, 'Generar Transacciones Aleatorias'),
-            createEl('div', { className: 'flex items-center space-x-4' },
-                createEl('div', {},
-                    createEl('label', { className: 'text-sm text-gray-600' }, 'Cantidad'),
-                    createEl('input', { id: 'num-random-txs', type: 'number', value: '10', min: '1', max: '1000', className: 'w-24 p-2 border rounded' })
-                ),
-                createEl('button', {
-                    className: 'px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold',
-                    onClick: async () => {
-                        const n = parseInt(document.getElementById('num-random-txs').value, 10);
-                        for (let i = 0; i < n; i++) {
-                            const signed = await signTransaction(generateRandomAddress(), Math.floor(Math.random() * 100) + 1);
-                            await api.createTx(signed);
-                        }
-                        alert(`${n} transacciones enviadas`);
-                        transactions(root);
-                    }
-                }, 'Generar y Enviar')
-            )
-        );
+            <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+                <h2 id="pending-tx-count" class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Transacciones Pendientes (${pendingTransactions.length})</h2>
+                <p class="text-xs text-gray-400 mb-3">Se actualiza automáticamente cada 5 segundos.</p>
+                <div id="pending-tx-table-container"></div>
+            </div>
 
-        // Difficulty
-        const difficultyCard = createEl('div', { className: 'bg-white p-6 rounded-xl shadow-md' },
-            createEl('h3', { className: 'text-lg font-bold text-gray-900 mb-3 border-b pb-2' }, 'Configuración de Dificultad'),
-            createEl('div', { className: 'flex items-center space-x-2 mb-3' },
-                createEl('span', { className: 'text-gray-600' }, 'Actual:'),
-                createEl('span', { id: 'current-difficulty-display', className: 'font-mono text-xl text-blue-600 font-bold' }, currentDifficulty)
-            ),
-            createEl('div', { className: 'flex space-x-2' },
-                createEl('input', {
-                    id: 'new-difficulty-input',
-                    type: 'text',
-                    className: 'flex-1 p-2 border border-gray-300 rounded-lg font-mono',
-                    placeholder: 'Ej: 0000'
-                }),
-                createEl('button', {
-                    className: 'px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold',
-                    onClick: async () => {
-                        const val = document.getElementById('new-difficulty-input').value.trim();
-                        if (!val) return;
-                        try {
-                            const res = await api.setDifficulty(val);
-                            alert('Dificultad actualizada: ' + res);
-                            updateDifficultyDisplay();
-                        } catch (e) {
-                            alert('Error: ' + e.message);
-                        }
-                    }
-                }, 'Cambiar')
-            )
-        );
+            ${buildMassGenerator()}
+            ${buildBalanceCheck()}
 
-        root.append(headerCard, statusBar);
-        if (faucetCard) root.append(faucetCard);
-        root.append(singleTxCard, listCard, batchCard, randomCard, difficultyCard);
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                ${sectionTitle('Configuración de Dificultad')}
+                <div class="flex items-center space-x-2 mb-3">
+                    <span class="text-gray-600">Actual:</span>
+                    <span id="current-difficulty-display" class="font-mono text-xl text-blue-600 font-bold">${currentDifficulty}</span>
+                </div>
+                <div class="flex space-x-2">
+                    <input id="new-difficulty-input" type="text" placeholder="Ej: 0000" class="flex-1 p-2 border border-gray-300 rounded-lg font-mono" />
+                    <button class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-semibold"
+                            onClick=${async () => {
+                                const val = document.getElementById('new-difficulty-input').value.trim();
+                                if (!val) return;
+                                try {
+                                    const res = await api.setDifficulty(val);
+                                    showToast(`Dificultad actualizada: ${res}`, 'success');
+                                    updateDifficultyDisplay();
+                                } catch (e) {
+                                    showToast(`Error: ${e.message}`, 'error');
+                                }
+                            }}>Cambiar</button>
+                </div>
+            </div>
+        `, root);
 
-        await updateDifficultyDisplay();
+        // Conectar comportamientos que requieren DOM ya montado
+        renderPendingList(document.getElementById('pending-tx-table-container'));
+        wireFixedToggles();
+        updateDifficultyDisplay();
+
+        // Polling de transacciones pendientes (pausa en pestaña oculta)
+        root._txPollTimer = setInterval(refreshPendingList, POLL_INTERVAL_MS);
 
     } catch (error) {
-        root.innerHTML = '';
-        root.append(createEl('div', { className: 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative' },
-            createEl('strong', { className: 'font-bold' }, 'Error: '),
-            createEl('span', { className: 'block sm:inline' }, 'No se pudieron cargar las transacciones. Intenta de nuevo más tarde.')
-        ));
+        render(errorBox('No se pudieron cargar las transacciones. Intenta de nuevo más tarde.'), root);
         console.error('Error in transactions component:', error);
     }
+}
+
+function createNotice(message, colorClasses) {
+    const div = document.createElement('div');
+    div.className = `${colorClasses} border px-3 py-2 rounded text-sm`;
+    div.textContent = message;
+    return div;
 }

@@ -1,7 +1,7 @@
 import { navbar, updateHeaderTitle } from './components/navbar.js';
 import { dashboard } from './components/dashboard.js';
 import { blockList } from './components/blockList.js';
-import { blockDetail } from './components/blockDetails.js';
+import { blockDetail } from './components/blockdetails.js';
 import { transactions } from './components/transactions.js';
 import { transactionDetail } from './components/transactionDetail.js';
 import { statistics } from './components/statistics.js';
@@ -11,6 +11,22 @@ import { createEl } from './utils/dom.js';
 // Get root elements for navigation and main content
 const navRoot = document.getElementById('main-nav');
 const content = document.getElementById('content');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+
+function openSidebar() {
+    sidebar.classList.remove('-translate-x-full');
+    sidebarOverlay.classList.remove('hidden');
+}
+
+function closeSidebar() {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('hidden');
+}
+
+if (sidebarToggle) sidebarToggle.addEventListener('click', openSidebar);
+if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
 
 // Initialize the navbar (which includes status indicator logic)
 navbar(document.getElementById('navbar'));
@@ -35,9 +51,7 @@ navLinksData.forEach(item => {
         document.querySelectorAll('.nav-link').forEach(x => x.classList.remove('bg-blue-600', 'text-white'));
         a.classList.add('bg-blue-600', 'text-white');
         updateHeaderTitle(item.name); // Update header title on nav click
-        // Close sidebar on mobile after click
-        if (window.innerWidth <= 768) {
-        }
+        closeSidebar(); // Close sidebar on mobile after click
     });
 
     // Set initial active state for Dashboard
@@ -66,16 +80,17 @@ function route() {
     });
 
     // Update the main header title
+    let title = 'Página Desconocida';
     const activeNavItem = navLinksData.find(item => item.hash === currentRoute);
     if (activeNavItem) {
-        updateHeaderTitle(activeNavItem.name);
+        title = activeNavItem.name;
     } else if (currentRoute.startsWith('blocks/')) {
-        updateHeaderTitle('Detalle del Bloque');
+        title = 'Detalle del Bloque';
     } else if (currentRoute.startsWith('transactions/')) {
-        updateHeaderTitle('Detalle de Transacción');
-    } else {
-        updateHeaderTitle('Página Desconocida'); // Default for unknown or dynamic routes
+        title = 'Detalle de Transacción';
     }
+    updateHeaderTitle(title);
+    document.title = `${title} · Blockchain Explorer`;
 
     // Render component based on route
     if (hash === 'dashboard') {

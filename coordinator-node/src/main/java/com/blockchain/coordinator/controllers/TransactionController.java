@@ -3,8 +3,11 @@ package com.blockchain.coordinator.controllers;
 import com.blockchain.coordinator.config.BlockchainConfig;
 import com.blockchain.coordinator.dtos.CountResponse;
 import com.blockchain.coordinator.dtos.StatusResponse;
+import com.blockchain.coordinator.dtos.TransactionDetailResponse;
+import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.Transaction;
 import com.blockchain.coordinator.services.BalanceService;
+import com.blockchain.coordinator.services.BlockService;
 import com.blockchain.coordinator.services.TransactionPoolService;
 import com.blockchain.coordinator.util.EcUtils;
 import org.bouncycastle.util.encoders.Hex;
@@ -22,6 +25,7 @@ import java.security.Signature;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.Locale;
@@ -38,13 +42,16 @@ public class TransactionController {
     private final TransactionPoolService transactionPoolService;
     private final BalanceService balanceService;
     private final BlockchainConfig blockchainConfig;
+    private final BlockService blockService;
 
     public TransactionController(TransactionPoolService transactionPoolService,
                                  BalanceService balanceService,
-                                 BlockchainConfig blockchainConfig) {
+                                 BlockchainConfig blockchainConfig,
+                                 BlockService blockService) {
         this.transactionPoolService = transactionPoolService;
         this.balanceService = balanceService;
         this.blockchainConfig = blockchainConfig;
+        this.blockService = blockService;
     }
 
     @PostMapping
@@ -120,5 +127,28 @@ public class TransactionController {
                 linkTo(methodOn(TransactionController.class).getPendingTransactionCount()).withSelfRel(),
                 linkTo(methodOn(TransactionController.class).getPendingTransactions()).withRel("view-pending-transactions"));
         return ResponseEntity.ok(countModel);
+    }
+
+    @GetMapping("/{txId}")
+    public ResponseEntity<?> getTransaction(@PathVariable String txId) {
+        Optional<Transaction> pending = transactionPoolService.getAllPendingTransactions().stream()
+                .filter(t -> txId.equals(t.getId()))
+                .findFirst();
+        if (pending.isPresent()) {
+            TransactionDetailResponse resp = new TransactionDetailResponse(pending.get(), null, null, "PENDING");
+            return ResponseEntity.ok(EntityModel.of(resp));
+        }
+
+        Optional<Block> block = blockService.getBlockContainingTransaction(txId);
+        if (block.isPresent()) {
+            Transaction tx = block.get().getData().stream()
+                    .filter(t -> txId.equals(t.getId()))
+                    .findFirst()
+                    .orElse(null);
+            TransactionDetailResponse resp = new TransactionDetailResponse(tx, block.get().getHash(), block.get().getIndex(), "MINED");
+            return ResponseEntity.ok(EntityModel.of(resp));
+        }
+
+        return ResponseEntity.notFound().build();
     }
 }

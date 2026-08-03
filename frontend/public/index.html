@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Blockchain Explorer</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231e3a8a'/><path d='M50 20 L75 35 L75 65 L50 80 L25 65 L25 35 Z' fill='none' stroke='white' stroke-width='6'/><path d='M50 35 L65 43 L65 57 L50 65 L35 57 L35 43 Z' fill='%23facc15'/></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
@@ -41,8 +42,10 @@
 
 <body class="bg-gray-100 text-gray-800 antialiased h-screen overflow-hidden">
     <div id="app" class="flex h-full">
+        <!-- Overlay para cerrar el sidebar en mobile -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden"></div>
         <aside id="sidebar"
-            class="w-64 bg-gray-900 text-gray-200 p-6 flex flex-col justify-between overflow-y-auto shadow-xl z-10 rounded-r-lg">
+            class="w-64 bg-gray-900 text-gray-200 p-6 flex flex-col justify-between overflow-y-auto shadow-xl z-30 rounded-r-lg fixed md:relative inset-y-0 left-0 -translate-x-full md:translate-x-0 transition-transform duration-300">
             <div>
                 <div class="text-white text-3xl font-extrabold mb-8 flex items-center justify-center">
                     <svg class="w-8 h-8 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
@@ -54,12 +57,19 @@
                 </div>
                 <nav id="main-nav" class="space-y-2"></nav>
             </div>
-            <div class="mt-8 text-xs text-gray-400 text-center">&copy; 2025 Blockchain Explorer</div>
+            <div class="mt-8 text-xs text-gray-400 text-center">&copy; 2026 Blockchain Explorer</div>
         </aside>
         <div class="flex-1 flex flex-col overflow-hidden">
             <header id="navbar" class="bg-white text-gray-800 p-4 shadow-md flex items-center justify-between z-0">
-                <div class="text-2xl font-bold text-gray-800"><span id="header-title">Dashboard</span></div>
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center min-w-0">
+                    <button id="sidebar-toggle"
+                        class="md:hidden mr-3 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                        aria-label="Abrir menú">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <div class="text-2xl font-bold text-gray-800 truncate"><span id="header-title">Dashboard</span></div>
+                </div>
+                <div class="flex items-center space-x-4 flex-shrink-0">
                     <div id="status-indicator"
                         class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium">
                         <i class="fas fa-circle mr-2 text-yellow-500 animate-pulse"></i>
@@ -67,7 +77,7 @@
                     </div>
                 </div>
             </header>
-            <main id="content" class="flex-1 p-8 overflow-y-auto bg-gray-50"></main>
+            <main id="content" class="flex-1 p-4 md:p-8 overflow-y-auto bg-gray-50"></main>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -79,6 +89,7 @@
             document.write('<script src="./lib/elliptic.min.js"><\/script>');
         }
     </script>
+    <script src="./config.js"></script>
     <script type="module" src="../src/main.js"></script>
 </body>
 

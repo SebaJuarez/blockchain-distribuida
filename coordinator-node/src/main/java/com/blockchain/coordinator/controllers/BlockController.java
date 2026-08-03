@@ -16,10 +16,12 @@ import org.springframework.hateoas.EntityModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import com.blockchain.coordinator.dtos.MiningResultResponse;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
@@ -53,6 +55,14 @@ public class BlockController {
         return ResponseEntity.ok(blockModel);
     }
 
+    @GetMapping("/by-index/{index}")
+    public ResponseEntity<EntityModel<Block>> getBlockByIndex(@PathVariable int index) {
+        Optional<Block> blockOptional = blockService.getBlockByIndex(index);
+        if (blockOptional.isEmpty()) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(EntityModel.of(blockOptional.get(),
+                linkTo(methodOn(BlockController.class).getBlockByIndex(index)).withSelfRel()));
+    }
+
     @GetMapping("/{blockHash}")
     public ResponseEntity<EntityModel<Block>> getBlockByHash(@PathVariable String blockHash) {
         Optional<Block> blockOptional = blockService.getBlockByHash(blockHash);
@@ -61,10 +71,28 @@ public class BlockController {
     }
 
     @GetMapping
-    public ResponseEntity<CollectionModel<EntityModel<Block>>> getAllBlocks() {
-        List<EntityModel<Block>> blocks = StreamSupport.stream(blockService.blockRepository.findAll().spliterator(), false)
+    public ResponseEntity<Map<String, Object>> getAllBlocks(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 500);
+        List<EntityModel<Block>> blocks = blockService.getBlocksPage(safePage, safeSize).stream()
                 .map(EntityModel::of).collect(Collectors.toList());
-        return ResponseEntity.ok(CollectionModel.of(blocks));
+        long total = blockService.getBlockCount();
+        long totalPages = total == 0 ? 0 : (total + safeSize - 1) / safeSize;
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        Map<String, Object> embedded = new LinkedHashMap<>();
+        embedded.put("blockList", blocks);
+        body.put("_embedded", embedded);
+        body.put("_links", Collections.emptyMap());
+        Map<String, Object> pageMetadata = new LinkedHashMap<>();
+        pageMetadata.put("size", safeSize);
+        pageMetadata.put("number", safePage);
+        pageMetadata.put("totalElements", total);
+        pageMetadata.put("totalPages", totalPages);
+        body.put("page", pageMetadata);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/result")

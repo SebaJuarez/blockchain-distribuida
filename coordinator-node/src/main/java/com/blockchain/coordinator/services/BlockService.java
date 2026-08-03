@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +44,7 @@ public class BlockService {
     private final RewardService rewardService;
     private final BlockchainConfig blockchainConfig;
     private final String BLOCK_HASHES_ZSET_KEY = "block_hashes";
+    private final String BLOCK_HASHES_INDEX_ZSET_KEY = "block_hashes_by_index";
     private String latestBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
     private Block latestBlock;
 
@@ -70,7 +72,38 @@ public class BlockService {
 
     public void init() {
         this.loadLatestBlockFromRedis();
+        this.rebuildIndexZsetIfNeeded();
         this.difficultyService.loadCurrentSystemChallenge();
+    }
+
+    /**
+     * Persiste un bloque y lo registra en ambos ZSETs: por timestamp (para el bloque mas reciente)
+     * y por indice (para paginacion/ordenamiento estable).
+     */
+    private void saveBlockWithIndex(Block block) {
+        blockRepository.save(block);
+        redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, block.getHash(), block.getTimestamp());
+        redisTemplate.opsForZSet().add(BLOCK_HASHES_INDEX_ZSET_KEY, block.getHash(), block.getIndex());
+    }
+
+    /**
+     * Reconstruye el ZSET por indice a partir del ZSET por timestamp si faltan entradas
+     * (datos pre-existentes en Redis de versiones anteriores).
+     */
+    private void rebuildIndexZsetIfNeeded() {
+        Long tsCount = redisTemplate.opsForZSet().size(BLOCK_HASHES_ZSET_KEY);
+        Long idxCount = redisTemplate.opsForZSet().size(BLOCK_HASHES_INDEX_ZSET_KEY);
+        if (tsCount != null && idxCount != null && tsCount.equals(idxCount)) return;
+
+        logger.info("BlockService: Reconstruyendo indice de bloques por indice (timestamp={}, index={})", tsCount, idxCount);
+        redisTemplate.delete(BLOCK_HASHES_INDEX_ZSET_KEY);
+        Set<String> hashes = redisTemplate.opsForZSet().range(BLOCK_HASHES_ZSET_KEY, 0, -1);
+        if (hashes == null) return;
+        for (String h : hashes) {
+            blockRepository.findById(h).ifPresent(b ->
+                    redisTemplate.opsForZSet().add(BLOCK_HASHES_INDEX_ZSET_KEY, h, b.getIndex()));
+        }
+        logger.info("BlockService: Indice por indice reconstruido con {} bloques", hashes.size());
     }
 
     private void loadLatestBlockFromRedis() {
@@ -104,8 +137,7 @@ public class BlockService {
         List<Transaction> genesisTransactions = Collections.singletonList(new Transaction("system", "genesis", 0.0));
         Block genesisBlock = new Block(0, genesisPreviousHash, genesisTransactions, genesisTimestamp, 0, "");
         genesisBlock.setHash(calculateFinalBlockHash(genesisBlock));
-        blockRepository.save(genesisBlock);
-        redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, genesisBlock.getHash(), genesisBlock.getTimestamp());
+        saveBlockWithIndex(genesisBlock);
         this.latestBlock = genesisBlock;
         this.latestBlockHash = genesisBlock.getHash();
 
@@ -178,8 +210,8 @@ public class BlockService {
             blockToSave.setHash(solvedBlockHash);
             blockToSave.setTimestamp(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC));
             Block savedBlock = blockRepository.save(blockToSave);
-
             redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, savedBlock.getHash(), savedBlock.getTimestamp());
+            redisTemplate.opsForZSet().add(BLOCK_HASHES_INDEX_ZSET_KEY, savedBlock.getHash(), savedBlock.getIndex());
             this.latestBlock = savedBlock;
             this.latestBlockHash = savedBlock.getHash();
 
@@ -233,8 +265,7 @@ public class BlockService {
         );
         Block recompenseBlock = new Block(currentLatestBlock.getIndex() + 1, currentLatestBlockHash, blockTransactions, blockTimestamp, 0, "");
         recompenseBlock.setHash(calculateFinalBlockHash(recompenseBlock));
-        blockRepository.save(recompenseBlock);
-        redisTemplate.opsForZSet().add(BLOCK_HASHES_ZSET_KEY, recompenseBlock.getHash(), recompenseBlock.getTimestamp());
+        saveBlockWithIndex(recompenseBlock);
 
         balanceService.applyBlock(recompenseBlock);
 
@@ -249,6 +280,59 @@ public class BlockService {
 
     public Optional<Block> getBlockByHash(String blockHash) {
         return blockRepository.findById(blockHash);
+    }
+
+    public long getBlockCount() {
+        Long count = redisTemplate.opsForZSet().size(BLOCK_HASHES_INDEX_ZSET_KEY);
+        return count != null ? count : 0L;
+    }
+
+    /**
+     * Devuelve una pagina de bloques ordenados de mas reciente a mas antiguo (por indice).
+     */
+    public List<Block> getBlocksPage(int page, int size) {
+        long total = getBlockCount();
+        if (total == 0) return Collections.emptyList();
+        long start = (long) page * size;
+        if (start >= total) return Collections.emptyList();
+        long end = Math.min(start + size - 1, total - 1);
+        Set<String> hashes = redisTemplate.opsForZSet().reverseRange(BLOCK_HASHES_INDEX_ZSET_KEY, start, end);
+        if (hashes == null) return Collections.emptyList();
+        List<Block> blocks = new ArrayList<>();
+        for (String h : hashes) {
+            blockRepository.findById(h).ifPresent(blocks::add);
+        }
+        return blocks;
+    }
+
+    public Optional<Block> getBlockByIndex(int index) {
+        if (index < 0) return Optional.empty();
+        Set<String> hashes = redisTemplate.opsForZSet().range(BLOCK_HASHES_INDEX_ZSET_KEY, index, index);
+        if (hashes == null || hashes.isEmpty()) return Optional.empty();
+        return blockRepository.findById(hashes.iterator().next());
+    }
+
+    /**
+     * Busca el bloque que contiene una transaccion, recorriendo desde el mas reciente.
+     */
+    public Optional<Block> getBlockContainingTransaction(String txId) {
+        long total = getBlockCount();
+        long batchSize = 100;
+        for (long start = 0; start < total; start += batchSize) {
+            long end = Math.min(start + batchSize - 1, total - 1);
+            Set<String> hashes = redisTemplate.opsForZSet().reverseRange(BLOCK_HASHES_INDEX_ZSET_KEY, start, end);
+            if (hashes == null) break;
+            for (String h : hashes) {
+                Optional<Block> blockOpt = blockRepository.findById(h);
+                if (blockOpt.isPresent()) {
+                    Block block = blockOpt.get();
+                    if (block.getData() != null && block.getData().stream().anyMatch(tx -> txId.equals(tx.getId()))) {
+                        return Optional.of(block);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     public String getLatestBlockHash() {
