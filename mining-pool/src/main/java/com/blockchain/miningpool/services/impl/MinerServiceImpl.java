@@ -92,7 +92,7 @@ public class MinerServiceImpl implements MinerService {
         });
 
         long remaining = minersRepository.count();
-        int targetSize = (remaining == 0) ? 5 : 0;
+        int targetSize = (remaining == 0) ? computeTargetSizeFromDifficulty() : 0;
         logger.debug("MinerService: Miners vivos: {}. Estado deseado MIG: {}", remaining, targetSize);
 
         String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
@@ -119,6 +119,16 @@ public class MinerServiceImpl implements MinerService {
     @Override
     public Long getMinersCount() {
         return minersRepository.count();
+    }
+
+    private static final String COORDINATOR_CHALLENGE_KEY = "current_system_challenge";
+    private static final int MAX_MIG_SIZE = 5;
+    private static final int FALLBACK_ZEROS = 4;
+
+    private int computeTargetSizeFromDifficulty() {
+        String challenge = redisTemplate.opsForValue().get(COORDINATOR_CHALLENGE_KEY);
+        int zeros = (challenge != null && !challenge.isEmpty()) ? challenge.length() : FALLBACK_ZEROS;
+        return Math.max(1, Math.min(zeros, MAX_MIG_SIZE));
     }
 
     @Override

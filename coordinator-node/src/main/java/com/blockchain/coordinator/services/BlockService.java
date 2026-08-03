@@ -185,10 +185,12 @@ public class BlockService {
 
             balanceService.applyBlock(savedBlock);
 
+            long resolutionMs = System.currentTimeMillis() - currentTask.getCreatedAt();
+
             Timer.builder("mining.block.resolution.time")
                     .tag("difficulty", String.valueOf(currentTask.getChallenge().length()))
                     .register(meterRegistry)
-                    .record(System.currentTimeMillis() - currentTask.getCreatedAt(), TimeUnit.MILLISECONDS);
+                    .record(resolutionMs, TimeUnit.MILLISECONDS);
 
             Counter.builder("mining.blocks.solved")
                     .tag("difficulty", String.valueOf(currentTask.getChallenge().length()))
@@ -196,6 +198,8 @@ public class BlockService {
 
             Counter.builder("mining.transactions.processed")
                     .register(meterRegistry).increment(savedBlock.getData().size());
+
+            difficultyService.recordResolutionAndMaybeAdjust(resolutionMs);
 
             return Optional.of(savedBlock);
         } catch (CloneNotSupportedException e) {
