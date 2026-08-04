@@ -280,7 +280,7 @@ resource "google_container_node_pool" "apps" {
   }
   autoscaling {
     min_node_count = var.node_count
-    max_node_count = var.node_count * 2
+    max_node_count = var.node_count * 4
   }
 }
 
