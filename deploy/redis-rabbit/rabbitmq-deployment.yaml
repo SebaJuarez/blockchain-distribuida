@@ -23,10 +23,17 @@ spec:
       nodeSelector:
         role: "infra"
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 999
         fsGroup: 999
       # --------------------------------
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/rabbitmq && chmod 600 /var/lib/rabbitmq/.erlang.cookie"]
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
       containers:
         - name: rabbitmq
           image: rabbitmq:3-management
@@ -43,6 +50,8 @@ spec:
               cpu: "500m"
           # ---------------------------
           securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
             seccompProfile: { type: RuntimeDefault }

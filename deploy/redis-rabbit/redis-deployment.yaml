@@ -27,13 +27,6 @@ spec:
         runAsUser: 999
         fsGroup: 999
       # --------------------------------
-      initContainers:
-        - name: fix-permissions
-          image: busybox
-          command: ["sh", "-c", "chown -R 999:999 /data"]
-          volumeMounts:
-            - name: redis-data
-              mountPath: /data
       containers:
         - name: redis
           image: redis:alpine
