@@ -7,7 +7,7 @@ resource "helm_release" "prometheus_adapter" {
 
   values = [<<-EOT
     prometheus:
-      url: http://prometheus-v2-kube-prometheus-prometheus.observability.svc
+      url: http://prometheus-v2-kube-prometh-prometheus.observability.svc
       port: 9090
     nodeSelector:
       role: obs
@@ -18,11 +18,11 @@ resource "helm_release" "prometheus_adapter" {
         effect: NoSchedule
     rules:
       default: false
-      external:
-        - seriesQuery: 'mining_transactions_pending'
-          resources: { overrides: { namespace: { resource: "namespace" } } }
-          name: { as: "mining_transactions_pending" }
-          metricsQuery: 'avg(mining_transactions_pending)'
+      custom:
+        - seriesQuery: 'http_server_requests_seconds_count'
+          resources: { overrides: { namespace: { resource: "namespace" }, pod: { resource: "pod" } } }
+          name: { as: "http_requests_per_second" }
+          metricsQuery: 'sum(rate(http_server_requests_seconds_count{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
   EOT
   ]
 }
