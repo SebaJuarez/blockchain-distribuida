@@ -253,15 +253,16 @@ resource "google_container_node_pool" "infra" {
     disk_type    = var.disk_type
     labels       = { role = "infra" }
     tags         = [var.infra_node_tag]
+    
+    taint {
+      key    = "workload"
+      value  = "infra"
+      effect = "NO_SCHEDULE"
+    }
   }
   autoscaling {
     min_node_count = var.node_count
     max_node_count = var.node_count * 2
-  }
-  taint {
-    key    = "workload"
-    value  = "infra"
-    effect = "NO_SCHEDULE"
   }
 }
 
