@@ -10,7 +10,7 @@ def rabbit_connect(host=os.environ.get("RABBITMQ_HOST", "localhost")):
     while retries > 0:
         try:
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host=host)
+                pika.ConnectionParameters(host=host, heartbeat=20)
             )
             print(f"Successfully connected to RabbitMQ at {host}", file=sys.stdout, flush=True)
             return connection
