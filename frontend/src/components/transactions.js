@@ -19,6 +19,9 @@ export async function transactions(root) {
     let myBalance = 0;
     let systemConfig = {};
     let pendingTransactions = [];
+    let miningTransactions = [];
+    let queuedTransactions = [];
+    let poolStatus = { inCandidateBlock: 0, queued: 0, total: 0, candidateTransactionIds: [] };
     let isTesting = false;
     let isGenesis = false;
     let walletAddress = getWalletAddress();
@@ -174,45 +177,95 @@ export async function transactions(root) {
     }
 
     // ---- Pending list ----
+    function applyPoolSplit() {
+        const miningIds = new Set(poolStatus.candidateTransactionIds || []);
+        miningTransactions = pendingTransactions.filter(tx => miningIds.has(tx.id));
+        queuedTransactions = pendingTransactions.filter(tx => !miningIds.has(tx.id));
+    }
+
+    function renderTxTable(txs) {
+        return html`
+            <div class="table-responsive">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remitente</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Receptor</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Monto</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${txs.map(tx => html`
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 font-mono text-xs text-blue-600">
+                                    <a href="#transactions/${tx.id}" class="hover:underline" title="${tx.id}">${shortenId(tx.id, 6, 4)}</a>
+                                </td>
+                                <td class="px-4 py-2 font-mono text-xs" title="${tx.sender}">${shortenId(tx.sender, 6, 4)}</td>
+                                <td class="px-4 py-2 font-mono text-xs" title="${tx.receiver}">${shortenId(tx.receiver, 6, 4)}</td>
+                                <td class="px-4 py-2 font-semibold">${tx.amount.toLocaleString()}</td>
+                                <td class="px-4 py-2 text-gray-500 text-xs">${new Date(tx.timestamp * 1000).toLocaleTimeString()}</td>
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>`;
+    }
+
     function renderPendingList(container) {
         render(html`
-            ${pendingTransactions.length === 0
-                ? html`<p class="text-gray-500 italic text-center py-4">No hay transacciones pendientes.</p>`
-                : html`
-                    <div class="table-responsive">
-                        <table class="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remitente</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Receptor</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Monto</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                ${pendingTransactions.map(tx => html`
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-4 py-2 font-mono text-xs text-blue-600">
-                                            <a href="#transactions/${tx.id}" class="hover:underline" title="${tx.id}">${shortenId(tx.id, 6, 4)}</a>
-                                        </td>
-                                        <td class="px-4 py-2 font-mono text-xs" title="${tx.sender}">${shortenId(tx.sender, 6, 4)}</td>
-                                        <td class="px-4 py-2 font-mono text-xs" title="${tx.receiver}">${shortenId(tx.receiver, 6, 4)}</td>
-                                        <td class="px-4 py-2 font-semibold">${tx.amount.toLocaleString()}</td>
-                                        <td class="px-4 py-2 text-gray-500 text-xs">${new Date(tx.timestamp * 1000).toLocaleTimeString()}</td>
-                                    </tr>
-                                `)}
-                            </tbody>
-                        </table>
-                    </div>`}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                <div class="flex items-center space-x-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div class="w-11 h-11 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-hammer"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-amber-700 uppercase font-bold">Minándose</p>
+                        <p class="text-2xl font-bold text-amber-800">${miningTransactions.length}</p>
+                        <p class="text-xs text-amber-600">Ya entraron al bloque candidato</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="w-11 h-11 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-hourglass-half"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-700 uppercase font-bold">En Cola</p>
+                        <p class="text-2xl font-bold text-blue-800">${queuedTransactions.length}</p>
+                        <p class="text-xs text-blue-600">Esperando ser incluidas</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-sm font-bold text-amber-700 uppercase tracking-wide mb-2 flex items-center space-x-2">
+                <i class="fas fa-hammer"></i>
+                <span>Minándose (${miningTransactions.length})</span>
+            </h3>
+            ${miningTransactions.length === 0
+                ? html`<p class="text-gray-500 italic text-sm mb-4">No hay transacciones siendo minadas en este momento.</p>`
+                : renderTxTable(miningTransactions)}
+
+            <h3 class="text-sm font-bold text-blue-700 uppercase tracking-wide mt-6 mb-2 flex items-center space-x-2">
+                <i class="fas fa-hourglass-half"></i>
+                <span>En Cola (${queuedTransactions.length})</span>
+            </h3>
+            ${queuedTransactions.length === 0
+                ? html`<p class="text-gray-500 italic text-sm">No hay transacciones en cola.</p>`
+                : renderTxTable(queuedTransactions)}
         `, container);
     }
 
     async function refreshPendingList() {
         if (document.hidden) return;
         try {
-            const txData = await api.txs();
+            const [txData, status] = await Promise.all([
+                api.txs(),
+                api.poolStatus().catch(() => null)
+            ]);
             pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
+            if (status) poolStatus = status;
+            applyPoolSplit();
             const container = document.getElementById('pending-tx-table-container');
             const countEl = document.getElementById('pending-tx-count');
             if (countEl) countEl.textContent = `Transacciones Pendientes (${pendingTransactions.length})`;
@@ -408,12 +461,15 @@ export async function transactions(root) {
     }
 
     try {
-        const [txData, configRes] = await Promise.all([
+        const [txData, configRes, statusRes] = await Promise.all([
             api.txs(),
-            api.config().catch(() => ({}))
+            api.config().catch(() => ({})),
+            api.poolStatus().catch(() => null)
         ]);
         systemConfig = configRes;
         pendingTransactions = txData._embedded ? txData._embedded.transactionList : [];
+        if (statusRes) poolStatus = statusRes;
+        applyPoolSplit();
         isTesting = systemConfig.mode === 'testing';
         isGenesis = systemConfig.rewardSource === 'genesis';
 
@@ -571,7 +627,7 @@ export async function transactions(root) {
 
             <div class="bg-white p-6 rounded-xl shadow-md mb-6">
                 <h2 id="pending-tx-count" class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Transacciones Pendientes (${pendingTransactions.length})</h2>
-                <p class="text-xs text-gray-400 mb-3">Se actualiza automáticamente cada 5 segundos.</p>
+                <p class="text-xs text-gray-400 mb-3">Se actualiza automáticamente cada 5 segundos. Se separan las que ya entraron al bloque candidato (minándose) de las que siguen esperando en cola.</p>
                 <div id="pending-tx-table-container"></div>
             </div>
 

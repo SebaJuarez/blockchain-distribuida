@@ -48,6 +48,7 @@ export const api = {
     submitResult: (b) => fetchJSON('/blocks/result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }),
     txs: () => fetchJSON('/transactions/pending'),
     txCount: () => fetchJSON('/transactions/pending/count'),
+    poolStatus: () => fetchJSON('/transactions/pool-status'),
     transaction: (txId) => fetchJSON(`/transactions/${txId}`),
     createTx: (t) => fetchJSON('/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(t) }),
     getMiners: () => fetchJSON('/pools/miners'),

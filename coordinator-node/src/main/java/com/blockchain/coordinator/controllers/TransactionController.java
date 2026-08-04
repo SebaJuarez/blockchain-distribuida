@@ -156,8 +156,15 @@ public class TransactionController {
     @GetMapping("/pool-status")
     public Map<String, Object> poolStatus() {
         MiningTask current = currentMiningTaskService.getCurrentTask();
-        int inCandidate = current != null ? current.getBlock().getData().size() : 0;
+        List<String> candidateTransactionIds = current != null
+                ? current.getBlock().getData().stream().map(Transaction::getId).collect(Collectors.toList())
+                : Collections.emptyList();
+        int inCandidate = candidateTransactionIds.size();
         int total = transactionPoolService.getPendingTransactionCount();
-        return Map.of("inCandidateBlock", inCandidate, "queued", total - inCandidate, "total", total);
+        return Map.of(
+                "inCandidateBlock", inCandidate,
+                "queued", Math.max(0, total - inCandidate),
+                "total", total,
+                "candidateTransactionIds", candidateTransactionIds);
     }
 }

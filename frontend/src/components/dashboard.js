@@ -14,12 +14,13 @@ export async function dashboard(root) {
     render(spinner(), root);
 
     try {
-        let allBlocksData, latestBlock, pendingTxCountData;
+        let allBlocksData, latestBlock, pendingTxCountData, poolStatusData;
         try {
-            [allBlocksData, latestBlock, pendingTxCountData] = await Promise.all([
+            [allBlocksData, latestBlock, pendingTxCountData, poolStatusData] = await Promise.all([
                 api.allBlocks(0, 1),
                 api.latest(),
-                api.txCount().catch(() => ({ count: 0 }))
+                api.txCount().catch(() => ({ count: 0 })),
+                api.poolStatus().catch(() => null)
             ]);
         } catch (e) {
             render(errorBox(`No se pudo conectar con el coordinador (${getApiBaseUrl()}). ¿Está corriendo?`), root);
@@ -40,6 +41,8 @@ export async function dashboard(root) {
 
         const totalBlocks = allBlocksData.page ? allBlocksData.page.totalElements : (allBlocksData._embedded?.blockList?.length || 0);
         const pendingTxCount = pendingTxCountData.count !== undefined ? pendingTxCountData.count.toLocaleString() : '0';
+        const miningInCandidate = poolStatusData ? (poolStatusData.inCandidateBlock || 0) : null;
+        const queuedInPool = poolStatusData ? (poolStatusData.queued || 0) : null;
 
         const isTesting = systemConfig.mode === 'testing';
         const isGenesis = systemConfig.rewardSource === 'genesis';
@@ -116,7 +119,13 @@ export async function dashboard(root) {
                     html`<span class="text-xs font-mono text-gray-500 break-all">${truncateHash(latestBlock.hash, 20)}</span>
                          <a href="#blocks/${latestBlock.hash}" class="text-blue-500 text-sm hover:underline">Ver detalles</a>`)}
                 ${statCard('fas fa-layer-group', 'bg-green-100 text-green-600', 'Total Bloques', totalBlocks.toLocaleString())}
-                ${statCard('fas fa-hourglass-half', 'bg-yellow-100 text-yellow-600', 'Pendientes', pendingTxCount)}
+                ${poolStatusData
+                    ? html`
+                        ${statCard('fas fa-hourglass-half', 'bg-blue-100 text-blue-600', 'En Cola', queuedInPool.toLocaleString(),
+                            html`<span class="text-xs text-gray-500">Esperando ser incluidas en un bloque</span>`)}
+                        ${statCard('fas fa-hammer', 'bg-amber-100 text-amber-600', 'Minándose', miningInCandidate.toLocaleString(),
+                            html`<span class="text-xs text-gray-500">En el bloque candidato actual</span>`)}`
+                    : statCard('fas fa-hourglass-half', 'bg-yellow-100 text-yellow-600', 'Pendientes', pendingTxCount)}
                 ${statCard('fas fa-wallet', 'bg-purple-100 text-purple-600', 'Tu Balance',
                     Number(myBalance.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     html`<span class="text-xs text-gray-400 font-mono" title="${walletAddress}">${truncateHash(walletAddress, 16)}</span>`)}
