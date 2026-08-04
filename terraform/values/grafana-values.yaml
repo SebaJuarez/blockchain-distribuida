@@ -199,3 +199,108 @@ alerting:
                   conditions:
                     - evaluator: { type: gt, params: [3] }
                   refId: C
+
+      - orgId: 1
+        name: app-logs
+        folder: Blockchain Alerts
+        interval: 1m
+        rules:
+
+          - uid: no-coordinador-logs-5m
+            title: "Sin logs del coordinador en 5 minutos"
+            condition: C
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "El coordinador no emitió logs en los últimos 5 minutos"
+              description: "El pod nodo-coordinador está caído, en CrashLoopBackOff o sin conectividad con Loki/Alloy."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: loki_ds
+                model:
+                  expr: 'count_over_time({namespace="apps", container="nodo-coordinador"}[5m])'
+                  queryType: instant
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: lt, params: [1] }
+                  refId: C
+
+          - uid: no-pool-logs-5m
+            title: "Sin logs del mining pool en 5 minutos"
+            condition: C
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "El mining pool no emitió logs en los últimos 5 minutos"
+              description: "El pod node-pool está caído, en CrashLoopBackOff o sin conectividad con Loki/Alloy."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: loki_ds
+                model:
+                  expr: 'count_over_time({namespace="apps", container="node-pool"}[5m])'
+                  queryType: instant
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: lt, params: [1] }
+                  refId: C
+
+          - uid: sustained-app-errors
+            title: "Errores sostenidos en logs de apps"
+            condition: C
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Más de 5 errores en logs de apps en 5 minutos"
+              description: "Errores/exception sostenidos en el coordinador o el mining pool. Revisar el dashboard de logs."
+            data:
+              - refId: A
+                relativeTimeRange: { from: 300, to: 0 }
+                datasourceUid: loki_ds
+                model:
+                  expr: 'sum(count_over_time({namespace="apps"} |~ "(?i)\b(error|exception)\b"[5m]))'
+                  queryType: instant
+                  refId: A
+              - refId: B
+                datasourceUid: "-100"
+                model:
+                  type: reduce
+                  expression: A
+                  reducer: last
+                  refId: B
+              - refId: C
+                datasourceUid: "-100"
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator: { type: gt, params: [5] }
+                  refId: C
