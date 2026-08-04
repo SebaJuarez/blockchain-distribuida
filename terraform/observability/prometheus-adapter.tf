@@ -9,6 +9,13 @@ resource "helm_release" "prometheus_adapter" {
     prometheus:
       url: http://prometheus-v2-kube-prometheus-prometheus.observability.svc
       port: 9090
+    nodeSelector:
+      role: obs
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: obs
+        effect: NoSchedule
     rules:
       default: false
       external:

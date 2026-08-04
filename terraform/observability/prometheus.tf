@@ -25,6 +25,13 @@ resource "helm_release" "prometheus" {
           enabled: false
       tls:
         enabled: false
+      nodeSelector:
+        role: obs
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: obs
+          effect: NoSchedule
     prometheus:
       prometheusSpec:
         resources:
@@ -35,6 +42,33 @@ resource "helm_release" "prometheus" {
             cpu: "500m"
             memory: "800Mi"
         serviceMonitorSelectorNilUsesHelmValues: false
+        nodeSelector:
+          role: obs
+        tolerations:
+          - key: workload
+            operator: Equal
+            value: obs
+            effect: NoSchedule
+    alertmanager:
+      alertmanagerSpec:
+        nodeSelector:
+          role: obs
+        tolerations:
+          - key: workload
+            operator: Equal
+            value: obs
+            effect: NoSchedule
+    kube-state-metrics:
+      nodeSelector:
+        role: obs
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: obs
+          effect: NoSchedule
+    prometheus-node-exporter:
+      tolerations:
+        - operator: Exists
     EOT
   ]
 }

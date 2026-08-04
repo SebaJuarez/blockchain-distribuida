@@ -284,6 +284,29 @@ resource "google_container_node_pool" "apps" {
   }
 }
 
+resource "google_container_node_pool" "obs" {
+  name     = "${var.cluster_name}-obs"
+  cluster  = google_container_cluster.primary.name
+  location = var.zone
+  initial_node_count = var.node_count
+  node_config {
+    machine_type = var.machine_type
+    disk_size_gb = var.boot_disk_size_gb
+    disk_type    = var.disk_type
+    labels       = { role = "obs" }
+
+    taint {
+      key    = "workload"
+      value  = "obs"
+      effect = "NO_SCHEDULE"
+    }
+  }
+  autoscaling {
+    min_node_count = var.node_count
+    max_node_count = var.node_count * 2
+  }
+}
+
 # --- COMPUTE WORKERS (MIG) ---
 
 resource "google_compute_instance_template" "python_miner" {
