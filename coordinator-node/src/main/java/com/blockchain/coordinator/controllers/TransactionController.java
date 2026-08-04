@@ -2,12 +2,14 @@ package com.blockchain.coordinator.controllers;
 
 import com.blockchain.coordinator.config.BlockchainConfig;
 import com.blockchain.coordinator.dtos.CountResponse;
+import com.blockchain.coordinator.dtos.MiningTask;
 import com.blockchain.coordinator.dtos.StatusResponse;
 import com.blockchain.coordinator.dtos.TransactionDetailResponse;
 import com.blockchain.coordinator.models.Block;
 import com.blockchain.coordinator.models.Transaction;
 import com.blockchain.coordinator.services.BalanceService;
 import com.blockchain.coordinator.services.BlockService;
+import com.blockchain.coordinator.services.CurrentMiningTaskService;
 import com.blockchain.coordinator.services.TransactionPoolService;
 import com.blockchain.coordinator.util.EcUtils;
 import org.bouncycastle.util.encoders.Hex;
@@ -24,11 +26,8 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Locale;
 
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
@@ -43,15 +42,18 @@ public class TransactionController {
     private final BalanceService balanceService;
     private final BlockchainConfig blockchainConfig;
     private final BlockService blockService;
+    private final CurrentMiningTaskService currentMiningTaskService;
 
     public TransactionController(TransactionPoolService transactionPoolService,
                                  BalanceService balanceService,
                                  BlockchainConfig blockchainConfig,
-                                 BlockService blockService) {
+                                 BlockService blockService,
+                                 CurrentMiningTaskService currentMiningTaskService) {
         this.transactionPoolService = transactionPoolService;
         this.balanceService = balanceService;
         this.blockchainConfig = blockchainConfig;
         this.blockService = blockService;
+        this.currentMiningTaskService = currentMiningTaskService;
     }
 
     @PostMapping
@@ -150,5 +152,12 @@ public class TransactionController {
         }
 
         return ResponseEntity.notFound().build();
+    }
+    @GetMapping("/pool-status")
+    public Map<String, Object> poolStatus() {
+        MiningTask current = currentMiningTaskService.getCurrentTask();
+        int inCandidate = current != null ? current.getBlock().getData().size() : 0;
+        int total = transactionPoolService.getPendingTransactionCount();
+        return Map.of("inCandidateBlock", inCandidate, "queued", total - inCandidate, "total", total);
     }
 }

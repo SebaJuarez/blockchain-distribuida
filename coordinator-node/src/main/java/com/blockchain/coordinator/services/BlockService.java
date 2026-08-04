@@ -216,6 +216,7 @@ public class BlockService {
             this.latestBlockHash = savedBlock.getHash();
 
             balanceService.applyBlock(savedBlock);
+            transactionPoolService.confirmTransactions(savedBlock.getData().size());
 
             long resolutionMs = System.currentTimeMillis() - currentTask.getCreatedAt();
 

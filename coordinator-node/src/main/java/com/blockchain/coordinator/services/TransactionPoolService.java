@@ -68,14 +68,18 @@ public class TransactionPoolService {
     // Obtiene y remueve hasta 'count' transacciones pendientes de Redis.
     public List<Transaction> getPendingTransactions(int count) {
         if (count <= 0) return Collections.emptyList();
+        List<String> raw = redisTemplate.opsForList().range(PENDING_TX_LIST_KEY, 0, count - 1);
+        if (raw == null) return Collections.emptyList();
         List<Transaction> result = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            String raw = redisTemplate.opsForList().leftPop(PENDING_TX_LIST_KEY);
-            if (raw == null) break; // la lista quedó vacía
-            Transaction tx = deserialize(raw);
+        for (String s : raw) {
+            Transaction tx = deserialize(s);
             if (tx != null) result.add(tx);
         }
         return result;
+    }
+    public void confirmTransactions(int count) {
+        if (count <= 0) return;
+        redisTemplate.opsForList().trim(PENDING_TX_LIST_KEY, count, -1);
     }
 
     public int getPendingTransactionCount() {
