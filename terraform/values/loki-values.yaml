@@ -37,8 +37,28 @@ chunksCache:
 resultsCache:
   enabled: false
   
+gateway:
+  nodeSelector:
+    role: obs
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: obs
+      effect: NoSchedule
+
+canary:
+  tolerations:
+    - operator: Exists
+
 singleBinary:
   replicas: 1
+  nodeSelector:
+    role: obs
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: obs
+      effect: NoSchedule
   resources:
     requests:
       cpu: "100m"

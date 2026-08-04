@@ -1,5 +1,14 @@
 adminPassword: admin
 
+# --- Nodo pool dedicado de observabilidad
+nodeSelector:
+  role: obs
+tolerations:
+  - key: workload
+    operator: Equal
+    value: obs
+    effect: NoSchedule
+
 # --- Datasources 
 datasources:
   datasources.yaml:
