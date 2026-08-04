@@ -38,6 +38,8 @@ public class MiningResultServiceImpl implements MiningResultService {
 
         String originalMinerPublicKey = miningResult.getMinerId();
 
+        boolean hasRegisteredMiners = minerService.getMinersCount() > 0;
+
         boolean isGpu = minerService.findById(originalMinerPublicKey).map(Miner::isGpuMiner).orElse(false);
         String hardwareType = isGpu ? "GPU" : "CPU";
 
@@ -50,9 +52,13 @@ public class MiningResultServiceImpl implements MiningResultService {
                 .tag("miner", originalMinerPublicKey)
                 .register(meterRegistry).increment(miningResult.getNonce());
 
-        // Si el minerId no es una clave EC válida (VMs del MIG sin identidad),
-        // el trabajo se atribuye al pool en vez de fragmentarse.
-        String shareOwner = com.blockchain.miningpool.util.EcUtils.isValidPublicKeyHex(originalMinerPublicKey)
+        // Sin mineros GPU registrados el premio es del pool
+        if (!hasRegisteredMiners) {
+            miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
+        }
+
+        // Si el minerId no es una clave EC válidael trabajo se atribuye al pool.
+        String shareOwner = hasRegisteredMiners && com.blockchain.miningpool.util.EcUtils.isValidPublicKeyHex(originalMinerPublicKey)
                 ? originalMinerPublicKey
                 : poolKeyConfig.getPublicKeyHex();
 
