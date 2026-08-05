@@ -28,6 +28,9 @@ public class PoolKeyConfig {
     @Value("${pool.identity.key-file:pool-identity.key}")
     private String keyFilePath;
 
+    @Value("${pool.identity.require-existing:false}")
+    private boolean requireExisting;
+
     @Getter
     private PublicKey publicKey;
     private PrivateKey privateKey;
@@ -47,6 +50,10 @@ public class PoolKeyConfig {
             this.privateKey = kf.generatePrivate(new PKCS8EncodedKeySpec(privBytes));
             this.publicKey = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
             logger.info("PoolKeyConfig: identidad EC cargada desde {}", keyFilePath);
+        } else if (requireExisting) {
+            throw new IllegalStateException("PoolKeyConfig: identidad EC no encontrada en " + keyFilePath +
+                    " y pool.identity.require-existing=true. No se genera una identidad nueva para evitar " +
+                    "dividir el fondo del pool entre claves efímeras.");
         } else {
             KeyPair keyPair = EcUtils.generateKeyPair();
             this.privateKey = keyPair.getPrivate();

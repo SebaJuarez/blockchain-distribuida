@@ -29,11 +29,20 @@ spec:
         runAsUser: 1000
         fsGroup: 1000
       # --------------------------------
+      volumes:
+        - name: pool-identity
+          secret:
+            secretName: pool-identity
+            readOnly: true
       containers:
         - name: node-pool
           image: sebajuarez/minerpool:ab1d48f
           ports:
             - containerPort: 8081
+          volumeMounts:
+            - name: pool-identity
+              mountPath: /etc/pool-identity
+              readOnly: true
           # --- LÍMITES DE RECURSOS ---
           resources:
             requests:
