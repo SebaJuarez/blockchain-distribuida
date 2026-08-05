@@ -286,7 +286,7 @@ alerting:
                 relativeTimeRange: { from: 300, to: 0 }
                 datasourceUid: loki_ds
                 model:
-                  expr: 'sum(count_over_time({instance=~"apps/.*"} |~ "(?i)\b(error|exception)\b"[5m]))'
+                  expr: 'sum(count_over_time({instance=~"apps/.*"} |~ `(?i)\b(error|exception)\b`[5m]))'
                   queryType: instant
                   refId: A
               - refId: B

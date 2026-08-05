@@ -109,7 +109,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[15m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ `(?i)\\b(error|exception)\\b`[15m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -172,7 +172,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\bwarn\\b\"[15m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ `(?i)\\bwarn\\b`[15m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -453,7 +453,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum by (instance) (count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
+          "expr": "sum by (instance) (count_over_time({instance=~\"apps/.*\"} |~ `(?i)\\b(error|exception)\\b`[5m]))",
           "legendFormat": "{{instance}}",
           "queryType": "range",
           "refId": "A"
@@ -513,7 +513,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ `(?i)\\b(error|exception)\\b`[5m]))",
           "legendFormat": "Errores",
           "queryType": "range",
           "refId": "A"
@@ -523,7 +523,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\bwarn\\b\"[5m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ `(?i)\\bwarn\\b`[5m]))",
           "legendFormat": "Warnings",
           "queryType": "range",
           "refId": "B"

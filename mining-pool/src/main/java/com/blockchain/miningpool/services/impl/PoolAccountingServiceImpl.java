@@ -2,6 +2,7 @@ package com.blockchain.miningpool.services.impl;
 
 import com.blockchain.miningpool.models.PoolBalance;
 import com.blockchain.miningpool.repositories.PoolBalanceRepository;
+import com.blockchain.miningpool.services.MinerService;
 import com.blockchain.miningpool.services.PoolAccountingService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final PoolBalanceRepository poolBalanceRepository;
+    private final MinerService minerService;
 
     @Override
     public void recordShare(String minerPublicKey) {
@@ -54,6 +56,14 @@ public class PoolAccountingServiceImpl implements PoolAccountingService {
     }
 
     private void doDistributeReward(double totalReward) {
+        // Solo se reparten shares cuando hay mineros registrados conectados.
+        // Sin mineros reales el premio queda íntegro en el pool.
+        if (minerService.getMinersCount() == 0) {
+            logger.info("PoolAccountingService: sin mineros registrados, recompensa de {} queda en el pool.",
+                    totalReward);
+            return;
+        }
+
         Set<String> shareKeys = redisTemplate.keys(SHARE_PREFIX + "*");
         if (shareKeys == null || shareKeys.isEmpty()) {
             logger.warn("PoolAccountingService: bloque ganado pero sin shares registrados. " +

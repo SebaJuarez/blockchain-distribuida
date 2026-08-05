@@ -38,7 +38,7 @@ public class MiningResultServiceImpl implements MiningResultService {
 
         String originalMinerPublicKey = miningResult.getMinerId();
 
-        boolean hasRegisteredMiners = minerService.getMinersCount() > 0;
+        boolean isRegisteredMiner = minerService.findById(originalMinerPublicKey).isPresent();
 
         boolean isGpu = minerService.findById(originalMinerPublicKey).map(Miner::isGpuMiner).orElse(false);
         String hardwareType = isGpu ? "GPU" : "CPU";
@@ -52,17 +52,13 @@ public class MiningResultServiceImpl implements MiningResultService {
                 .tag("miner", originalMinerPublicKey)
                 .register(meterRegistry).increment(miningResult.getNonce());
 
-        // Sin mineros GPU registrados el premio es del pool
-        if (!hasRegisteredMiners) {
-            miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
+        // El coordinador siempre le paga al pool y el pool reparte el balance interno.
+        miningResult.setMinerId(poolKeyConfig.getPublicKeyHex());
+
+        // Solo los mineros registrados acumulan shares. Si el minero no es uno registrado no se reparte nada: el premio queda íntegro en el pool.
+        if (isRegisteredMiner) {
+            poolAccountingService.recordShare(originalMinerPublicKey);
         }
-
-        // Si el minerId no es una clave EC válidael trabajo se atribuye al pool.
-        String shareOwner = hasRegisteredMiners && com.blockchain.miningpool.util.EcUtils.isValidPublicKeyHex(originalMinerPublicKey)
-                ? originalMinerPublicKey
-                : poolKeyConfig.getPublicKeyHex();
-
-        poolAccountingService.recordShare(shareOwner);
 
         Optional<Double> deliveryOutcome = reliableDeliveryService.send(miningResult);
         deliveryOutcome.ifPresent(reward -> {
