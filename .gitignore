@@ -6,3 +6,5 @@
 /deploy/secrets
 !/deploy/secrets/*.example
 /minero-registrable/venv
+
+/terraform/.terraform

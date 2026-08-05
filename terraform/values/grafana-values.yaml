@@ -220,7 +220,7 @@ alerting:
                 relativeTimeRange: { from: 300, to: 0 }
                 datasourceUid: loki_ds
                 model:
-                  expr: 'count_over_time({namespace="apps", container="nodo-coordinador"}[5m])'
+                  expr: 'count_over_time({instance=~"apps/nodo-coordinador.*"}[5m])'
                   queryType: instant
                   refId: A
               - refId: B
@@ -253,7 +253,7 @@ alerting:
                 relativeTimeRange: { from: 300, to: 0 }
                 datasourceUid: loki_ds
                 model:
-                  expr: 'count_over_time({namespace="apps", container="node-pool"}[5m])'
+                  expr: 'count_over_time({instance=~"apps/node-pool.*"}[5m])'
                   queryType: instant
                   refId: A
               - refId: B
@@ -286,7 +286,7 @@ alerting:
                 relativeTimeRange: { from: 300, to: 0 }
                 datasourceUid: loki_ds
                 model:
-                  expr: 'sum(count_over_time({namespace="apps"} |~ "(?i)\b(error|exception)\b"[5m]))'
+                  expr: 'sum(count_over_time({instance=~"apps/.*"} |~ "(?i)\b(error|exception)\b"[5m]))'
                   queryType: instant
                   refId: A
               - refId: B

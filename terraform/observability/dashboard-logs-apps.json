@@ -1,8 +1,8 @@
 {
   "id": null,
   "uid": "blockchain-app-logs",
-  "title": "Blockchain PoW — App Logs",
-  "description": "Logs del coordinador y el mining-pool desde Loki: volumen por app y por réplica, errores/warnings y logs en vivo.",
+  "title": "Blockchain PoW - App Logs",
+  "description": "Logs del coordinador y el mining-pool desde Loki: volumen por app y por replica, errores/warnings y logs en vivo.",
   "tags": [
     "blockchain",
     "logs",
@@ -20,7 +20,7 @@
     {
       "type": "row",
       "id": 100,
-      "title": "📊 Resumen de Logs",
+      "title": "Resumen de Logs",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -50,7 +50,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({namespace=\"apps\"}[15m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"}[15m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -109,7 +109,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({namespace=\"apps\"} |~ \"(?i)\\b(error|exception)\\b\"[15m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[15m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -172,7 +172,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({namespace=\"apps\"} |~ \"(?i)\\bwarn\\b\"[15m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\bwarn\\b\"[15m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -219,7 +219,7 @@
       "id": 4,
       "type": "stat",
       "title": "Streams con Logs (5m)",
-      "description": "Cantidad de pods/containers que emitieron logs en los últimos 5 minutos. Cada réplica aparece como un stream.",
+      "description": "Cantidad de pods/containers que emitieron logs en los ultimos 5 minutos. Cada replica aparece como un stream.",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -236,7 +236,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "count(count_over_time({namespace=\"apps\"}[5m]))",
+          "expr": "count(count_over_time({instance=~\"apps/.*\"}[5m]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -278,7 +278,7 @@
     {
       "type": "row",
       "id": 101,
-      "title": "📈 Volumen por App y Réplicas",
+      "title": "Volumen por App y Replicas",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -291,8 +291,8 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Logs por Pod (réplicas)",
-      "description": "Tasa de logs por pod. Si el HPA escala, cada réplica nueva aparece como una serie separada.",
+      "title": "Logs por Pod (replicas)",
+      "description": "Tasa de logs por pod (label instance = namespace/pod:container). Si el HPA escala, cada replica nueva aparece como una serie separada.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -309,8 +309,8 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum by (pod) (rate({namespace=\"apps\"}[5m]))",
-          "legendFormat": "{{pod}}",
+          "expr": "sum by (instance) (rate({instance=~\"apps/.*\"}[5m]))",
+          "legendFormat": "{{instance}}",
           "queryType": "range",
           "refId": "A"
         }
@@ -369,10 +369,20 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum by (container) (rate({namespace=\"apps\"}[5m]))",
-          "legendFormat": "{{container}}",
+          "expr": "sum(rate({instance=~\"apps/nodo-coordinador.*\"}[5m]))",
+          "legendFormat": "Coordinador",
           "queryType": "range",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki_ds"
+          },
+          "expr": "sum(rate({instance=~\"apps/node-pool.*\"}[5m]))",
+          "legendFormat": "Pool",
+          "queryType": "range",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -412,7 +422,7 @@
     {
       "type": "row",
       "id": 102,
-      "title": "🚨 Errores y Problemas",
+      "title": "Errores y Problemas",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -426,7 +436,7 @@
       "id": 20,
       "type": "timeseries",
       "title": "Errores por Pod",
-      "description": "Conteo de líneas con error/exception por pod en ventanas de 5 minutos.",
+      "description": "Conteo de lineas con error/exception por pod en ventanas de 5 minutos.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -443,8 +453,8 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum by (pod) (count_over_time({namespace=\"apps\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
-          "legendFormat": "{{pod}}",
+          "expr": "sum by (instance) (count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
+          "legendFormat": "{{instance}}",
           "queryType": "range",
           "refId": "A"
         }
@@ -503,7 +513,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({namespace=\"apps\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\b(error|exception)\\b\"[5m]))",
           "legendFormat": "Errores",
           "queryType": "range",
           "refId": "A"
@@ -513,7 +523,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "sum(count_over_time({namespace=\"apps\"} |~ \"(?i)\\bwarn\\b\"[5m]))",
+          "expr": "sum(count_over_time({instance=~\"apps/.*\"} |~ \"(?i)\\bwarn\\b\"[5m]))",
           "legendFormat": "Warnings",
           "queryType": "range",
           "refId": "B"
@@ -556,7 +566,7 @@
     {
       "type": "row",
       "id": 103,
-      "title": "🖥️ Logs en Vivo",
+      "title": "Logs en Vivo",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -569,8 +579,8 @@
     {
       "id": 30,
       "type": "logs",
-      "title": "Logs — Coordinador",
-      "description": "Logs en vivo del deployment nodo-coordinador (todas las réplicas del pod actual).",
+      "title": "Logs - Coordinador",
+      "description": "Logs en vivo del deployment nodo-coordinador (todas las replicas del pod actual).",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -587,7 +597,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "{namespace=\"apps\", container=\"nodo-coordinador\"}",
+          "expr": "{instance=~\"apps/nodo-coordinador.*\"}",
           "queryType": "range",
           "refId": "A"
         }
@@ -605,8 +615,8 @@
     {
       "id": 31,
       "type": "logs",
-      "title": "Logs — Mining Pool",
-      "description": "Logs en vivo del deployment node-pool (todas las réplicas del pod actual).",
+      "title": "Logs - Mining Pool",
+      "description": "Logs en vivo del deployment node-pool (todas las replicas del pod actual).",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -623,7 +633,7 @@
             "type": "loki",
             "uid": "loki_ds"
           },
-          "expr": "{namespace=\"apps\", container=\"node-pool\"}",
+          "expr": "{instance=~\"apps/node-pool.*\"}",
           "queryType": "range",
           "refId": "A"
         }
