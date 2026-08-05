@@ -33,7 +33,6 @@ spec:
         - name: pool-identity
           secret:
             secretName: pool-identity
-            readOnly: true
       containers:
         - name: node-pool
           image: sebajuarez/minerpool:ab1d48f
