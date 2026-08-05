@@ -20,7 +20,7 @@
     {
       "type": "row",
       "id": 100,
-      "title": " Resumen del Sistema",
+      "title": "Resumen del Sistema",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -266,7 +266,7 @@
     {
       "type": "row",
       "id": 101,
-      "title": "⛏️ Rendimiento de Minería",
+      "title": "Rendimiento de Minería",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -537,7 +537,7 @@
     {
       "type": "row",
       "id": 102,
-      "title": "🖥️ Comparativa CPU vs GPU",
+      "title": "Comparativa CPU vs GPU",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -739,7 +739,7 @@
     {
       "type": "row",
       "id": 103,
-      "title": "🔗 Actividad de la Cadena",
+      "title": "Actividad de la Cadena",
       "collapsed": false,
       "panels": [],
       "gridPos": {
