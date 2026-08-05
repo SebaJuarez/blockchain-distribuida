@@ -8,6 +8,7 @@ import com.blockchain.miningpool.services.MinerService;
 import com.blockchain.miningpool.services.PendingMiningResultService;
 import com.blockchain.miningpool.services.QueueAdmin;
 import com.blockchain.miningpool.services.WorkerDispatcher;
+import com.blockchain.miningpool.services.impl.MinerServiceImpl;
 import com.rabbitmq.client.Channel;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -17,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
@@ -33,6 +35,7 @@ public class ControlEventListener {
     private final QueueAdmin queueAdmin;
     private final PendingMiningResultService pendingMiningResultService;
     private final MeterRegistry meterRegistry;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.BLOCKS_CONTROL_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     public void onControlEvent(Message rawMessage, Channel ch) throws Exception {
@@ -75,11 +78,18 @@ public class ControlEventListener {
                     if (currentFrom > fullNonceRangeEnd) break;
                 }
 
+                redisTemplate.opsForValue().set(MinerServiceImpl.MINING_TASK_ACTIVE_KEY, task.getBlock().getHash());
+
             } else if (payload instanceof MiningTaskStatus dropped &&
                     (dropped.getEvent() == ExchangeEvent.CANDIDATE_BLOCK_DROPPED || dropped.getEvent() == ExchangeEvent.RESOLVED_CANDIDATE_BLOCK)) {
                 dispatcher.broadcastCancel(dropped.getPreliminaryHashBlockResolved());
                 queueAdmin.purgeSubTasksQueue();
                 pendingMiningResultService.deleteByCandidate(dropped.getPreliminaryHashBlockResolved());
+
+                String activeTaskHash = redisTemplate.opsForValue().get(MinerServiceImpl.MINING_TASK_ACTIVE_KEY);
+                if (activeTaskHash != null && activeTaskHash.equals(dropped.getPreliminaryHashBlockResolved())) {
+                    redisTemplate.delete(MinerServiceImpl.MINING_TASK_ACTIVE_KEY);
+                }
             } else {
                 logger.error("Tipo de payload inesperado: {}", payload.getClass().getName());
             }

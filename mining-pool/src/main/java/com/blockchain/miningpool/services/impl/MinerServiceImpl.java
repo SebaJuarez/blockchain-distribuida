@@ -23,6 +23,7 @@ public class MinerServiceImpl implements MinerService {
     private static final Logger logger = LoggerFactory.getLogger(MinerServiceImpl.class);
     private static final String MIG_TARGET_SIZE_KEY = "pool:mig-target-size";
     private static final String MIG_RESIZE_LOCK_KEY = "pool:mig-resize-lock";
+    public static final String MINING_TASK_ACTIVE_KEY = "pool:mining-task-active";
     private static final Duration MIG_RESIZE_LOCK_TTL = java.time.Duration.ofSeconds(10);
 
     private final MinersRepository minersRepository;
@@ -94,6 +95,11 @@ public class MinerServiceImpl implements MinerService {
         long remaining = minersRepository.count();
         int targetSize = (remaining == 0) ? computeTargetSizeFromDifficulty() : 0;
         logger.debug("MinerService: Miners vivos: {}. Estado deseado MIG: {}", remaining, targetSize);
+
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(MINING_TASK_ACTIVE_KEY)) && targetSize > 0) {
+            logger.info("MinerService: Tarea de minería en curso sin mineros registrados, se omite el resize del MIG.");
+            return;
+        }
 
         String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
         Integer lastTargetSize = lastTargetSizeStr != null ? Integer.valueOf(lastTargetSizeStr) : null;
