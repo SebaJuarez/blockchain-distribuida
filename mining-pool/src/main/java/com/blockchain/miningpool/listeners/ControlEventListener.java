@@ -57,7 +57,10 @@ public class ControlEventListener {
                 String challenge = task.getChallenge();
                 long fullNonceRangeStart = 0;
                 long fullNonceRangeEnd = estimateMaxNonceBasedOnChallenge(challenge);
-                int numberOfDivisions = (gpusMinersActive > 0) ? (int) gpusMinersActive : 5;
+                String lastTarget = redisTemplate.opsForValue().get("pool:mig-target-size");
+                int fallback = lastTarget != null ? Integer.parseInt(lastTarget) : 5;
+                int numberOfDivisions = (gpusMinersActive > 0) ? (int) gpusMinersActive : fallback;
+                
                 logger.info("Dividiendo el rango de nonce entre {} workers. Rango total: {} a {}", numberOfDivisions, fullNonceRangeStart, fullNonceRangeEnd);
 
                 if (numberOfDivisions < 1) numberOfDivisions = 1;

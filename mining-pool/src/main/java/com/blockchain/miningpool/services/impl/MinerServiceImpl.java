@@ -96,13 +96,15 @@ public class MinerServiceImpl implements MinerService {
         int targetSize = (remaining == 0) ? computeTargetSizeFromDifficulty() : 0;
         logger.debug("MinerService: Miners vivos: {}. Estado deseado MIG: {}", remaining, targetSize);
 
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(MINING_TASK_ACTIVE_KEY)) && targetSize > 0) {
+        String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
+        Integer lastTargetSize = lastTargetSizeStr != null ? Integer.valueOf(lastTargetSizeStr) : null;
+        boolean wouldScaleDown = lastTargetSize != null && targetSize < lastTargetSize;
+
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(MINING_TASK_ACTIVE_KEY)) && wouldScaleDown) {
             logger.info("MinerService: Tarea de minería en curso sin mineros registrados, se omite el resize del MIG.");
             return;
         }
 
-        String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
-        Integer lastTargetSize = lastTargetSizeStr != null ? Integer.valueOf(lastTargetSizeStr) : null;
 
         if (lastTargetSize != null && lastTargetSize == targetSize) {
             logger.debug("MinerService: Ya estaba en {}, no se vuelve a escalar.", targetSize);
