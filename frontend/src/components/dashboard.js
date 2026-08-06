@@ -35,8 +35,8 @@ export async function dashboard(root) {
         try { myBalance = await api.getBalance(getWalletAddress()); } catch (e) { console.log('Balance no disponible'); }
         try { currentDifficulty = await api.getDifficulty(); } catch (e) { console.log('Dificultad no disponible'); }
         try {
-            const faucetStatus = await api.faucetStatus();
-            systemRemainingValue = faucetStatus.systemRemaining;
+            const fundsStatus = await api.fundsStatus();
+            systemRemainingValue = fundsStatus.systemRemaining;
         } catch (e) { console.log('Estado de fondos no disponible'); }
 
         const totalBlocks = allBlocksData.page ? allBlocksData.page.totalElements : (allBlocksData._embedded?.blockList?.length || 0);
@@ -77,7 +77,7 @@ export async function dashboard(root) {
                         <i class="fas ${isTesting ? 'fa-flask' : 'fa-shield-alt'} text-xl"></i>
                         <div>
                             <span class="font-bold text-lg">Modo: ${systemConfig.mode.toUpperCase()}</span>
-                            <p class="text-sm opacity-80">${isTesting ? 'Faucet habilitado. Validación libre.' : 'Validación de saldo activa.'}</p>
+                            <p class="text-sm opacity-80">${isTesting ? 'Modo prueba: validación libre.' : 'Validación de saldo activa.'}</p>
                         </div>
                     </div>
                     ${isGenesis ? html`
@@ -99,12 +99,12 @@ export async function dashboard(root) {
                                     const btn = e.target;
                                     btn.disabled = true; btn.textContent = '...';
                                     try {
-                                        const res = await api.faucet({ publicKey: walletAddress, amount: 10000 });
+                                        const res = await api.loadFunds({ publicKey: walletAddress, amount: 10000 });
                                         btn.textContent = `+${Number(res.amount).toLocaleString()} ✓`;
                                         showToast(`Cargados ${Number(res.amount).toLocaleString()} a tu wallet`, 'success');
                                         setTimeout(() => { btn.disabled = false; btn.textContent = 'Cargar 10,000'; dashboard(root); }, 800);
                                     } catch (err) {
-                                        btn.textContent = 'Error (¿/api/faucet?)';
+                                        btn.textContent = 'Error al cargar saldo';
                                         showToast('Error al cargar fondos', 'error');
                                         setTimeout(() => { btn.disabled = false; btn.textContent = 'Cargar 10,000'; }, 3000);
                                     }
@@ -130,7 +130,7 @@ export async function dashboard(root) {
                     Number(myBalance.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
                     html`<span class="text-xs text-gray-400 font-mono" title="${walletAddress}">${truncateHash(walletAddress, 16)}</span>`)}
                 ${statCard('fas fa-coins', 'bg-indigo-100 text-indigo-600', 'Recompensa', currentReward.toFixed(2),
-                    isGenesis ? `Halving #${currentHalving} — próx en ${blocksUntilHalving} bloques` : '')}
+                    isGenesis ? `Halving #${currentHalving}: próx en ${blocksUntilHalving} bloques` : '')}
                 ${statCard('fas fa-list-alt', 'bg-pink-100 text-pink-600', 'TXs Último Bloque', (latestBlock.data || []).length.toLocaleString())}
                 ${statCard('fas fa-fingerprint', 'bg-teal-100 text-teal-600', 'Dificultad', currentDifficulty || 'N/A')}
                 ${statCard('fas fa-tachometer-alt', 'bg-cyan-100 text-cyan-600', 'Supply', supplyMined)}

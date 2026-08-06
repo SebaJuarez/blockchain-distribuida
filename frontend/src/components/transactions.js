@@ -48,6 +48,12 @@ export async function transactions(root) {
         }
     }
 
+    function getActiveWalletName() {
+        const wallets = listWallets();
+        const active = wallets.find(w => w.active) || wallets[0];
+        return (active && active.name) ? active.name : shortenId(walletAddress, 12, 8);
+    }
+
     function updateWalletHeader() {
         walletAddress = getWalletAddress();
         const el = document.getElementById('wallet-address-display');
@@ -55,6 +61,8 @@ export async function transactions(root) {
             el.textContent = shortenId(walletAddress, 12, 8);
             el.title = walletAddress;
         }
+        const nameEl = document.getElementById('wallet-name-display');
+        if (nameEl) nameEl.textContent = getActiveWalletName();
         refreshBalance();
     }
 
@@ -479,7 +487,7 @@ export async function transactions(root) {
             <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 rounded-xl shadow-lg mb-6">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div>
-                        <h2 class="text-2xl font-bold mb-1">Tu Wallet</h2>
+                        <h2 id="wallet-name-display" class="text-2xl font-bold mb-1">${getActiveWalletName()}</h2>
                         <div class="flex items-center space-x-2 text-blue-100">
                             <span id="wallet-address-display" class="font-mono text-sm" title="${walletAddress}">${shortenId(walletAddress, 12, 8)}</span>
                             <button class="text-blue-200 hover:text-white transition-colors" title="Copiar dirección"
@@ -525,7 +533,7 @@ export async function transactions(root) {
                 <div class="bg-orange-50 border-2 border-orange-300 border-dashed p-6 rounded-xl mb-6">
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div>
-                            <h3 class="text-lg font-bold text-orange-800">🚰 Faucet de Pruebas</h3>
+                            <h3 class="text-lg font-bold text-orange-800">🚰 Fondo de Pruebas</h3>
                             <p class="text-sm text-orange-700">Recarga tu wallet con fondos del sistema para hacer transacciones.</p>
                         </div>
                         <div class="flex space-x-2">
@@ -534,7 +542,7 @@ export async function transactions(root) {
                                         const btn = e.target;
                                         btn.disabled = true; btn.textContent = '...';
                                         try {
-                                            const res = await api.faucet({ publicKey: walletAddress, amount: 1000 });
+                                            const res = await api.loadFunds({ publicKey: walletAddress, amount: 1000 });
                                             await refreshBalance();
                                             btn.textContent = '+1,000 ✓';
                                             showToast(`Cargados ${Number(res.amount).toLocaleString()} a tu wallet`, 'success');
@@ -546,7 +554,7 @@ export async function transactions(root) {
                                         const btn = e.target;
                                         btn.disabled = true; btn.textContent = '...';
                                         try {
-                                            const res = await api.faucet({ publicKey: walletAddress, amount: 10000 });
+                                            const res = await api.loadFunds({ publicKey: walletAddress, amount: 10000 });
                                             await refreshBalance();
                                             btn.textContent = '+10,000 ✓';
                                             showToast(`Cargados ${Number(res.amount).toLocaleString()} a tu wallet`, 'success');

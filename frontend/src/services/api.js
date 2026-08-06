@@ -55,8 +55,8 @@ export const api = {
     getDifficulty: () => fetchJSON('/difficulty'),
     setDifficulty: (d) => fetchJSON('/difficulty', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ difficulty: d }) }),
     config: () => fetchJSON('/config'),
-    faucet: (body) => fetchJSON('/faucet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-    faucetStatus: () => fetchJSON('/faucet'),
+    loadFunds: (body) => fetchJSON('/faucet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    fundsStatus: () => fetchJSON('/faucet'),
     getBalance: (pk) => fetchJSON(`/balance/${pk}`),
     getMinerBalance: (pk) => fetchJSON(`/pools/miners/${pk}/balance`),
 };
