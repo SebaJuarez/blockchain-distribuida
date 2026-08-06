@@ -1,12 +1,12 @@
 # GCP
-project_id       = "majestic-stage-484717-f5"
+project_id       = "sdypp-final-501419"
 credentials_file = "terraform-sa-key.json"
 
 # Bucket para fragmentos de imagen
 # bucket_name      = "bucket-imagenes-sobel"
 
 # Backend
-bucket_backend   = "bucket-backend-blockchain"
+bucket_backend   = "bucket-backend-blockchain-2026"
 backend_prefix   = "terraform/tfstate"
 
 # VPC / Subnet donde corre el cluster y las VMs

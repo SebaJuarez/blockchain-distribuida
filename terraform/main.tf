@@ -1,11 +1,18 @@
 terraform {
   required_version = ">= 0.13"
+
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 5.0, < 7.0" 
+      version = ">= 5.0, < 7.0"
+    }
+
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.11"
     }
   }
+
   backend "gcs" {
     bucket = var.bucket_backend
     prefix = var.backend_prefix
@@ -154,12 +161,24 @@ resource "google_project_iam_member" "python_miner_roles" {
 
 # Workload Identity (Permisos para que K8s use la cuenta de Google)
 resource "google_service_account_iam_member" "allow_k8s_infra_impersonate" {
+
+  depends_on = [
+    time_sleep.wait_for_workload_identity,
+    google_container_node_pool.infra
+  ]
+
   service_account_id = google_service_account.python_miner.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[infra/blockchain-sa]"
 }
 
 resource "google_service_account_iam_member" "allow_k8s_apps_impersonate" {
+
+  depends_on = [
+    time_sleep.wait_for_workload_identity,
+    google_container_node_pool.apps
+  ]
+
   service_account_id = google_service_account.python_miner.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[apps/blockchain-sa]"
@@ -216,18 +235,30 @@ resource "google_container_cluster" "primary" {
     disk_type    = var.disk_type
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
+
+  cluster_autoscaling {
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+  }
+
 }
 
 resource "google_container_node_pool" "infra" {
   name     = "${var.cluster_name}-infra"
   cluster  = google_container_cluster.primary.name
   location = var.zone
+  initial_node_count = var.node_count
   node_config {
     machine_type = var.machine_type
     disk_size_gb = var.boot_disk_size_gb
     disk_type    = var.disk_type
     labels       = { role = "infra" }
     tags         = [var.infra_node_tag]
+    
+    taint {
+      key    = "workload"
+      value  = "infra"
+      effect = "NO_SCHEDULE"
+    }
   }
   autoscaling {
     min_node_count = var.node_count
@@ -239,12 +270,36 @@ resource "google_container_node_pool" "apps" {
   name     = "${var.cluster_name}-apps"
   cluster  = google_container_cluster.primary.name
   location = var.zone
+  initial_node_count = var.node_count
   node_config {
     machine_type = var.machine_type
     disk_size_gb = var.boot_disk_size_gb
     disk_type    = var.disk_type
     labels       = { role = "app" }
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  }
+  autoscaling {
+    min_node_count = var.node_count
+    max_node_count = var.node_count * 4
+  }
+}
+
+resource "google_container_node_pool" "obs" {
+  name     = "${var.cluster_name}-obs"
+  cluster  = google_container_cluster.primary.name
+  location = var.zone
+  initial_node_count = var.node_count
+  node_config {
+    machine_type = var.machine_type
+    disk_size_gb = var.boot_disk_size_gb
+    disk_type    = var.disk_type
+    labels       = { role = "obs" }
+
+    taint {
+      key    = "workload"
+      value  = "obs"
+      effect = "NO_SCHEDULE"
+    }
   }
   autoscaling {
     min_node_count = var.node_count
@@ -382,6 +437,14 @@ resource "google_compute_firewall" "allow-redis" {
 }
 
 # --- OTROS RECURSOS ---
+
+resource "time_sleep" "wait_for_workload_identity" {
+  depends_on = [
+    google_container_cluster.primary
+  ]
+
+  create_duration = "90s"
+}
 
 resource "tls_private_key" "ssh_key" {
   algorithm = "RSA"

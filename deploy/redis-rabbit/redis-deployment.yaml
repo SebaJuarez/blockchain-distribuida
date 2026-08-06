@@ -1,9 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: infra
 spec:
+  serviceName: "redis"
   replicas: 1
   selector:
     matchLabels:
@@ -13,8 +14,45 @@ spec:
       labels:
         app: redis
     spec:
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "infra"
+          effect: "NoSchedule"
+      # --- SEGMENTACIÓN ---
+      nodeSelector:
+        role: "infra"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      # --------------------------------
       containers:
         - name: redis
           image: redis:alpine
           ports:
             - containerPort: 6379
+          # --- LÍMITES DE RECURSOS ---
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          # ---------------------------
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi

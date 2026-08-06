@@ -3,9 +3,10 @@ kind: Service
 metadata:
   name: nodo-coordinador
   namespace: apps
+  labels:
+    prometheus-monitored: "true"
 spec:
   type: LoadBalancer
-
   selector:
     app: nodo-coordinador
   ports:

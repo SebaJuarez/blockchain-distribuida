@@ -11,17 +11,44 @@ spec:
     matchLabels:
       app: nodo-coordinador
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: nodo-coordinador
     spec:
+      serviceAccountName: blockchain-sa
+      # --- SEGMENTACIÓN ---
+      nodeSelector:
+        role: "app"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      # --------------------------------
       containers:
         - name: nodo-coordinador
-          image: sebajuarez/coordinador:b435429
+          image: sebajuarez/coordinador:083741c
           ports:
             - containerPort: 8080
+          # --- LÍMITES DE RECURSOS ---
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "300m"
+          # ---------------------------
           envFrom:
+            - configMapRef:
+                name: coordinador-config
             - secretRef:
                 name: coordinador-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }

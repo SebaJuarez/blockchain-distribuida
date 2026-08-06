@@ -9,12 +9,14 @@ import com.google.api.services.compute.Compute;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.api.services.compute.ComputeScopes;
+import org.springframework.context.annotation.Profile;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 
 @Configuration
+@Profile("gcp")
 public class GcpConfig {
 
     @Bean

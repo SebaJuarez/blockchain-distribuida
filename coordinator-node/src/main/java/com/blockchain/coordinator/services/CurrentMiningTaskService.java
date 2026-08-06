@@ -3,58 +3,63 @@ package com.blockchain.coordinator.services;
 import com.blockchain.coordinator.dtos.MiningTask;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 @Service
 @RequiredArgsConstructor
 public class CurrentMiningTaskService {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(CurrentMiningTaskService.class);
+
+    private static final String CURRENT_MINING_TASK_KEY = "mining:current_task";
+
+    private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final MiningTaskPublisher miningTaskPublisher;
-
-    private static final String CURRENT_MINING_TASK_KEY = "current_mining_task";
 
 
     @PostConstruct
     public void init() {
-        System.out.println("CurrentMiningTaskService: Inicializando. Cargando tarea previa de Redis si existe...");
+        logger.info("Initializing. Loading previous task from Redis if exists...");
         try {
-            String taskJson = redisTemplate.opsForValue().get(CURRENT_MINING_TASK_KEY);
-            if (taskJson != null && !taskJson.isEmpty()) {
-                MiningTask loadedTask = objectMapper.readValue(taskJson, MiningTask.class);
-                System.out.println("CurrentMiningTaskService: Tarea previa encontrada en Redis: Bloque " + loadedTask.getBlock().getHash() + " (Reintentos: " + loadedTask.getRetries() + ").");
+            String taskData = stringRedisTemplate.opsForValue().get(CURRENT_MINING_TASK_KEY);
+            if (taskData != null && !taskData.isEmpty()) {
+                MiningTask loadedTask = objectMapper.readValue(taskData, MiningTask.class);
+                logger.info("Previous mining task found in Redis: Block {} (Retries: {}).", 
+                          loadedTask.getBlock().getHash(), loadedTask.getRetries());
             } else {
-                System.out.println("CurrentMiningTaskService: No se encontró tarea de minería previa en Redis.");
+                logger.info("No previous mining task found in Redis.");
             }
         } catch (JsonProcessingException e) {
-            System.err.println("CurrentMiningTaskService: Error al deserializar MiningTask desde Redis durante la inicialización: " + e.getMessage());
-            redisTemplate.delete(CURRENT_MINING_TASK_KEY);
+            logger.error("Error deserializing MiningTask from Redis during initialization: {}", e.getMessage(), e);
+            stringRedisTemplate.delete(CURRENT_MINING_TASK_KEY);
         }
     }
 
     public void saveCurrentTask(MiningTask task) {
         try {
             String taskJson = objectMapper.writeValueAsString(task);
-            redisTemplate.opsForValue().set(CURRENT_MINING_TASK_KEY, taskJson);
-            System.out.println("CurrentMiningTaskService: Tarea actual guardada en Redis: " + task.getBlock().getHash());
+            stringRedisTemplate.opsForValue().set(CURRENT_MINING_TASK_KEY, taskJson);
+            logger.debug("Current task saved to Redis: {}", task.getBlock().getHash());
         } catch (JsonProcessingException e) {
-            System.err.println("CurrentMiningTaskService: Error al serializar MiningTask para Redis: " + e.getMessage());
+            logger.error("Error serializing MiningTask to Redis: {}", e.getMessage(), e);
         }
     }
 
     public MiningTask getCurrentTask() {
         try {
-            String taskJson = redisTemplate.opsForValue().get(CURRENT_MINING_TASK_KEY);
-            if (taskJson != null && !taskJson.isEmpty()) {
-                return objectMapper.readValue(taskJson, MiningTask.class);
+            String taskData = stringRedisTemplate.opsForValue().get(CURRENT_MINING_TASK_KEY);
+            if (taskData != null && !taskData.isEmpty()) {
+                return objectMapper.readValue(taskData, MiningTask.class);
             }
         } catch (JsonProcessingException e) {
-            System.err.println("CurrentMiningTaskService: Error al deserializar MiningTask desde Redis en getCurrentTask(): " + e.getMessage());
-            redisTemplate.delete(CURRENT_MINING_TASK_KEY);
+            logger.error("Error deserializing MiningTask from Redis in getCurrentTask(): {}", e.getMessage(), e);
+            stringRedisTemplate.delete(CURRENT_MINING_TASK_KEY);
         }
         return null;
     }
@@ -64,12 +69,12 @@ public class CurrentMiningTaskService {
         if (currentTask != null) {
             currentTask.setRetries(currentTask.getRetries() + 1);
             saveCurrentTask(currentTask); // Guardar la tarea actualizada
-            System.out.println("CurrentMiningTaskService: Reintentos incrementados para " + currentTask.getBlock().getHash() + " a " + currentTask.getRetries());
+            logger.debug("Incremented retries for {} to {}", currentTask.getBlock().getHash(), currentTask.getRetries());
         }
     }
 
     public void clearCurrentTask() {
-        redisTemplate.delete(CURRENT_MINING_TASK_KEY);
-        System.out.println("CurrentMiningTaskService: Tarea actual eliminada de Redis.");
+        stringRedisTemplate.delete(CURRENT_MINING_TASK_KEY);
+        logger.debug("Current task removed from Redis.");
     }
 }

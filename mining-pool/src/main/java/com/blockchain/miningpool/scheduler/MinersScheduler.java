@@ -2,6 +2,8 @@ package com.blockchain.miningpool.scheduler;
 
 import com.blockchain.miningpool.services.MinerService;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -11,6 +13,8 @@ import org.springframework.stereotype.Component;
 @Component
 @EnableScheduling
 public class MinersScheduler {
+
+    private static final Logger logger = LoggerFactory.getLogger(MinersScheduler.class);
 
     @Value("${miner.status-check-interval}")
     private long statusCheckInterval;
@@ -28,8 +32,7 @@ public class MinersScheduler {
     }
 
     public void checkGpuMiners() {
-        System.out.println("Checking GPU Miners...");
+        logger.debug("Checking GPU Miners...");
         minerService.checkKeepAliveMiners(statusCheckInterval);
     }
 }
-

@@ -5,6 +5,7 @@ metadata:
   namespace: infra
   annotations:
     networking.gke.io/load-balancer-type: "Internal"
+    networking.gke.io/internal-load-balancer-allow-global-access: "true"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.0.0.10

@@ -19,31 +19,54 @@ export function createEl(tag, attrs = {}, ...children) {
     return el;
 }
 
-// Function to copy text to clipboard (cross-browser compatible)
-export function copyToClipboard(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    document.body.appendChild(textarea);
-    textarea.select();
+// --- Toast singleton (reutilizable, sin acumular) ---
+let toastEl = null;
+let toastTimer = null;
+
+export function showToast(message, type = 'success') {
+    if (!toastEl) {
+        toastEl = createEl('div', { className: 'fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium text-white transition-all duration-300 opacity-0 transform translate-y-4' });
+        document.body.appendChild(toastEl);
+    }
+
+    const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600', warning: 'bg-yellow-600' };
+    toastEl.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium text-white transition-all duration-300 opacity-0 transform translate-y-4 ${colors[type] || colors.info}`;
+    toastEl.textContent = message;
+
+    requestAnimationFrame(() => {
+        toastEl.classList.remove('opacity-0', 'translate-y-4');
+        toastEl.classList.add('opacity-100', 'translate-y-0');
+    });
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toastEl.classList.remove('opacity-100', 'translate-y-0');
+        toastEl.classList.add('opacity-0', 'translate-y-4');
+    }, 2500);
+}
+
+// Function to copy text to clipboard (modern API with fallback)
+export async function copyToClipboard(text) {
     try {
-        document.execCommand('copy');
-        // Optional: show a temporary success message
-        console.log('Text copied to clipboard!');
-        const toast = createEl('div', {className: 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm transition-all duration-300 opacity-0 transform translate-y-4'}, 'Copiado al portapapeles!');
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.classList.remove('opacity-0', 'translate-y-4');
-            toast.classList.add('opacity-100', 'translate-y-0');
-        }, 10); // Small delay for transition
-        setTimeout(() => {
-            toast.classList.remove('opacity-100', 'translate-y-0');
-            toast.classList.add('opacity-0', 'translate-y-4');
-            toast.addEventListener('transitionend', () => toast.remove());
-        }, 2000);
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+        showToast('Copiado al portapapeles', 'success');
+        return true;
     } catch (err) {
         console.error('Failed to copy text: ', err);
+        showToast('No se pudo copiar', 'error');
+        return false;
     }
-    document.body.removeChild(textarea);
 }
 
 // Function to truncate hash for display
@@ -70,9 +93,9 @@ export function createLoadingSpinner() {
 }
 
 // Function to generate a random alphanumeric string for addresses
-export function generateRandomAddress(length = 10) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
+export function generateRandomAddress(length = 40) {
+    const chars = 'abcdef0123456789';
+    let result = '04';
     for (let i = 0; i < length; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
     }

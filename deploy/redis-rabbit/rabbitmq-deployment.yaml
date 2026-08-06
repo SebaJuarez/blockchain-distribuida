@@ -1,9 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rabbitmq
   namespace: infra
 spec:
+  serviceName: "rabbitmq-internal"
   replicas: 1
   selector:
     matchLabels:
@@ -13,9 +14,55 @@ spec:
       labels:
         app: rabbitmq
     spec:
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "infra"
+          effect: "NoSchedule"
+      # --- SEGMENTACIÓN ---
+      nodeSelector:
+        role: "infra"
+      securityContext:
+        fsGroup: 999
+      # --------------------------------
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/rabbitmq && chmod 600 /var/lib/rabbitmq/.erlang.cookie"]
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
       containers:
         - name: rabbitmq
           image: rabbitmq:3-management
           ports:
-            - containerPort: 5672   # puerto de RabbitMQ
-            - containerPort: 15672  # puerto para la UI web
+            - containerPort: 5672
+            - containerPort: 15672
+          # --- LÍMITES DE RECURSOS ---
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # ---------------------------
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi

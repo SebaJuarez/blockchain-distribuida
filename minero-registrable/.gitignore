@@ -43,3 +43,9 @@ env.bak/
 venv.bak/
 
 .env
+
+### identity keys ###
+*.key
+*.pub
+*.pem
+*.pkcs8
