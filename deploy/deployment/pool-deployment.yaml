@@ -35,7 +35,7 @@ spec:
             secretName: pool-identity
       containers:
         - name: node-pool
-          image: sebajuarez/minerpool:5bce6cb
+          image: sebajuarez/minerpool:55b889a
           ports:
             - containerPort: 8081
           volumeMounts:

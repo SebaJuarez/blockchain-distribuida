@@ -276,8 +276,7 @@ export async function statistics(root) {
                 ${statCard('fas fa-money-bill-wave', 'bg-purple-100 text-purple-600', 'Valor Promedio de TX', `${avgTransactionAmount.toFixed(2)}`)}
                 ${statCard('fas fa-minus-circle', 'bg-red-100 text-red-600', 'Bloque Más Pequeño (TXs)', minTxsInBlock.toLocaleString())}
                 ${statCard('fas fa-plus-circle', 'bg-blue-100 text-blue-600', 'Bloque Más Grande (TXs)', maxTxsInBlock.toLocaleString())}
-                ${statCard('fas fa-hourglass-start', 'bg-cyan-100 text-cyan-600', 'Retraso Promedio Primera TX', formatDuration(avgFirstTxDelay),
-                    'Valores altos pueden indicar un desfase de reloj (cliente vs. servidor).')}
+                ${statCard('fas fa-hourglass-start', 'bg-cyan-100 text-cyan-600', 'Retraso Promedio Primera TX', formatDuration(avgFirstTxDelay))}
                 ${statCard('fas fa-bolt', 'bg-lime-100 text-lime-600', 'Retraso Mínimo Primera TX', minFirstTxDelay === Infinity ? 'N/A' : formatDuration(minFirstTxDelay))}
                 ${statCard('fas fa-exclamation-triangle', 'bg-rose-100 text-rose-600', 'Retraso Máximo Primera TX', maxFirstTxDelay === 0 ? 'N/A' : formatDuration(maxFirstTxDelay))}
             </div>

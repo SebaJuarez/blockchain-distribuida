@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -23,11 +24,15 @@ public class MinerServiceImpl implements MinerService {
     private static final Logger logger = LoggerFactory.getLogger(MinerServiceImpl.class);
     private static final String MIG_TARGET_SIZE_KEY = "pool:mig-target-size";
     private static final String MIG_RESIZE_LOCK_KEY = "pool:mig-resize-lock";
+    public static final String MINING_TASK_ACTIVE_KEY = "pool:mining-task-active";
     private static final Duration MIG_RESIZE_LOCK_TTL = java.time.Duration.ofSeconds(10);
 
     private final MinersRepository minersRepository;
     private final MinerScalerService minerScaler;
     private final RedisTemplate<String, String> redisTemplate;
+
+    @Value("${pool.miners.require-gpu:true}")
+    private boolean requireGpu;
 
     public MinerServiceImpl(MinersRepository minersRepository, MinerScalerService minerScaler,
             MeterRegistry meterRegistry, RedisTemplate<String, String> redisTemplate) {
@@ -45,7 +50,7 @@ public class MinerServiceImpl implements MinerService {
 
     @Override
     public boolean addMiner(Miner miner) {
-        if (!miner.isGpuMiner())return false;
+        if (requireGpu && !miner.isGpuMiner()) return false;
         if (!EcUtils.isValidPublicKeyHex(miner.getPublicKey())) {
             logger.warn("MinerService: registro rechazado, clave pública inválida: {}", miner.getPublicKey());
             return false;
@@ -97,6 +102,13 @@ public class MinerServiceImpl implements MinerService {
 
         String lastTargetSizeStr = redisTemplate.opsForValue().get(MIG_TARGET_SIZE_KEY);
         Integer lastTargetSize = lastTargetSizeStr != null ? Integer.valueOf(lastTargetSizeStr) : null;
+        boolean wouldScaleDown = lastTargetSize != null && targetSize < lastTargetSize;
+
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(MINING_TASK_ACTIVE_KEY)) && wouldScaleDown) {
+            logger.info("MinerService: Tarea de minería en curso sin mineros registrados, se omite el resize del MIG.");
+            return;
+        }
+
 
         if (lastTargetSize != null && lastTargetSize == targetSize) {
             logger.debug("MinerService: Ya estaba en {}, no se vuelve a escalar.", targetSize);

@@ -20,8 +20,8 @@ if exist "requirements.txt" (
 )
 
 REM 4) Definir variables de entorno (ajústalas)
-set "BLOCKS_COORDINATOR_URL=http://35.188.170.234:8080/api/blocks/result"
-set "RABBITMQ_HOST=35.239.206.202"
+set "BLOCKS_COORDINATOR_URL=http://35.255.143.156:8080/api/blocks/result"
+set "RABBITMQ_HOST=34.46.166.0"
 set "MINER_ID=miner-python-001"
 
 REM 5) Ejecutar el miner

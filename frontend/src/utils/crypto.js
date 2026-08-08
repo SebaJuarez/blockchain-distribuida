@@ -13,7 +13,7 @@ function getEc() {
 }
 
 function uuid() {
-    if (crypto.randomUUID) return uuid();
+    if (crypto.randomUUID) return crypto.randomUUID();
     return 'w-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
