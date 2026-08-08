@@ -4,15 +4,72 @@ Este proyecto implementa una blockchain distribuida desde cero, con minería bas
 
 ## 📋 Tabla de Contenidos
 
-1. [Arquitectura del Sistema](#arquitectura-del-sistema)
-2. [Tecnologías utilizadas](#tecnologías-utilizadas)
-3. [Demostración del Funcionamiento (Frontend)](#demostración-del-funcionamiento-frontend)
+1. [Ejecución local con Docker Compose](#ejecución-local-con-docker-compose)
+2. [Arquitectura del Sistema](#arquitectura-del-sistema)
+3. [Tecnologías utilizadas](#tecnologías-utilizadas)
+4. [Demostración del Funcionamiento (Frontend)](#demostración-del-funcionamiento-frontend)
    - [Dashboard](#dashboard)
    - [Explorador de Bloques](#explorador-de-bloques)
    - [Transacciones](#transacciones)
    - [Estadísticas de la Red](#estadísticas-de-la-red)
-4. [Comparativa de Rendimiento: CPU vs GPU](#comparativa-de-rendimiento-cpu-vs-gpu)
-5. [Documento Técnico](#documento-técnico)
+5. [Comparativa de Rendimiento: CPU vs GPU](#comparativa-de-rendimiento-cpu-vs-gpu)
+6. [Documento Técnico](#documento-técnico)
+
+---
+
+## Ejecución local con Docker Compose
+
+El stack completo corre en local con Docker: el coordinador, el mining pool, un minero individual, dos mineros del pool, el frontend y la observabilidad. Todos los servicios se compilan desde el código fuente (no hace falta Maven, Node ni Python instalados).
+
+### Requisitos
+
+- Docker Engine 24+ con Docker Compose v2 (Docker Desktop en Windows/Mac)
+
+### Levantar el stack
+
+```bash
+docker compose up --build -d
+```
+
+El primer build tarda unos minutos (compila los servicios Java con Maven dentro de Docker). Para ver el progreso:
+
+```bash
+docker compose logs -f coordinator-node
+```
+
+### Servicios y URLs
+
+| Servicio | URL |
+|---|---|
+| Frontend (Blockchain Explorer) | http://localhost:3001 |
+| Coordinador (API) | http://localhost:8080/api |
+| Mining Pool (API) | http://localhost:8081/api/pools |
+| RabbitMQ Management | http://localhost:15672 (`guest` / `guest`) |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3000 (`admin` / `admin`) |
+
+### Poner a minar la red
+
+1. Abrí http://localhost:3001.
+2. En la pestaña **Transactions**, creá una wallet o usá la generada.
+3. Cargá fondos con **Load funds** (faucet del modo testing).
+4. Creá una transacción con **New transaction**.
+
+El coordinador publica tareas de minería cada 10 segundos; el **minero individual** y los **2 mineros del pool** compiten y los bloques empiezan a aparecer en el Dashboard y en el Explorador de Bloques.
+
+### Verificación rápida
+
+- Mineros registrados en el pool: `curl http://localhost:8081/api/pools/miners`
+- Bloques minados: `curl http://localhost:8080/api/blocks?page=0&size=5`
+- Logs de los mineros: `docker compose logs -f minero-individual minero-pool-1 minero-pool-2`
+
+### Resetear el entorno
+
+```bash
+docker compose down -v
+```
+
+Esto elimina los contenedores, la red y los volúmenes (Redis, identidad del pool, etc.), dejando el entorno en cero.
 
 ---
 

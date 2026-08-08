@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -30,6 +31,9 @@ public class MinerServiceImpl implements MinerService {
     private final MinerScalerService minerScaler;
     private final RedisTemplate<String, String> redisTemplate;
 
+    @Value("${pool.miners.require-gpu:true}")
+    private boolean requireGpu;
+
     public MinerServiceImpl(MinersRepository minersRepository, MinerScalerService minerScaler,
             MeterRegistry meterRegistry, RedisTemplate<String, String> redisTemplate) {
         this.minersRepository = minersRepository;
@@ -46,7 +50,7 @@ public class MinerServiceImpl implements MinerService {
 
     @Override
     public boolean addMiner(Miner miner) {
-        if (!miner.isGpuMiner())return false;
+        if (requireGpu && !miner.isGpuMiner()) return false;
         if (!EcUtils.isValidPublicKeyHex(miner.getPublicKey())) {
             logger.warn("MinerService: registro rechazado, clave pública inválida: {}", miner.getPublicKey());
             return false;

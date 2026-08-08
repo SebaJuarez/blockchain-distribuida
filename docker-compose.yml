@@ -8,7 +8,7 @@ services:
       ports:
         - "8080:8080"
       environment:
-        - SPRING_PROFILES_ACTIVE=dev
+        - SPRING_PROFILES_ACTIVE=local
         - SPRING_REDIS_HOST=redis
         - SPRING_REDIS_PORT=6379
         - SPRING_RABBIT_HOST=rabbitmq
@@ -18,11 +18,83 @@ services:
         - BLOCKCHAIN_GENESIS_SUPPLY=21000000
         - BLOCKCHAIN_BASE_REWARD=50
         - BLOCKCHAIN_HALVING_INTERVAL=10
+        - BLOCKCHAIN_MINING_HASH_CHALLENGE=0000
       depends_on:
         redis:
           condition: service_healthy
         rabbitmq:
           condition: service_healthy
+
+  mining-pool:
+    build: ./mining-pool
+    container_name: mining-pool
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - SERVER_PORT=8081
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - SPRING_RABBIT_HOST=rabbitmq
+      - SPRING_RABBIT_PORT=5672
+      - METADATA_COORDINATOR_URL=http://coordinator-node:8080
+      - POOL_IDENTITY_KEY_FILE=/app/identity/pool-identity.key
+      - POOL_MINERS_REQUIRE_GPU=false
+      - MINER_STATUS_CHECK_INTERVAL=15000
+    volumes:
+      - pool-identity:/app/identity
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      coordinator-node:
+        condition: service_started
+
+  # Minero individual: consume tareas del coordinador via RabbitMQ
+  minero-individual:
+    build: ./minero
+    container_name: minero-individual
+    environment:
+      - BLOCKS_COORDINATOR_URL=http://coordinator-node:8080/api/blocks/result
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - coordinator-node
+      - rabbitmq
+
+  # Mineros registrables: se registran en el pool y reciben subtareas
+  minero-pool-1:
+    build: ./minero-registrable
+    container_name: minero-pool-1
+    environment:
+      - POOL_BASE_URL=http://mining-pool:8081/api/pools
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - mining-pool
+      - rabbitmq
+
+  minero-pool-2:
+    build: ./minero-registrable
+    container_name: minero-pool-2
+    environment:
+      - POOL_BASE_URL=http://mining-pool:8081/api/pools
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - mining-pool
+      - rabbitmq
+
+  # Frontend (Blockchain Explorer)
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3001:80"
+    environment:
+      - FRONTEND_BLOCKCHAIN_API=http://localhost:8080/api
+      - FRONTEND_POOL_API=http://localhost:8081/api
+    depends_on:
+      - coordinator-node
+      - mining-pool
 
   # Servicio de RabbitMQ
   rabbitmq:
@@ -37,8 +109,9 @@ services:
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   # Servicio de Redis
   redis:
@@ -95,3 +168,6 @@ services:
       command: -config.file=/etc/promtail/promtail.yml
       depends_on:
         - loki
+
+volumes:
+  pool-identity:

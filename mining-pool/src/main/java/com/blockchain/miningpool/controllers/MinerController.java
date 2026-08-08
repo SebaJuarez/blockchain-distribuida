@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.hateoas.EntityModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,10 +33,13 @@ public class MinerController {
         private final MiningResultService miningResultService;
         private final com.blockchain.miningpool.config.PoolKeyConfig poolKeyConfig;
         private final com.blockchain.miningpool.services.PoolAccountingService poolAccountingService;
+
+        @Value("${pool.miners.require-gpu:true}")
+        private boolean requireGpu;
         
         @PostMapping("/register")
         public ResponseEntity<EntityModel<RegisterResponse>> registerMiner(@RequestBody Miner miner) {
-                if (!miner.isGpuMiner()) {
+                if (requireGpu && !miner.isGpuMiner()) {
                         RegisterResponse resp = new RegisterResponse(HttpStatus.BAD_REQUEST,
                                         "Solo se aceptan mineros GPU");
                         return ResponseEntity

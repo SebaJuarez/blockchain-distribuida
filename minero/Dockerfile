@@ -9,4 +9,4 @@ COPY . .
 RUN python -m pip install --upgrade pip && \
     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-CMD ["python", "-m", "minero-registrable"]
+CMD ["python", "-m", "minero"]

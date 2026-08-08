@@ -1,5 +1,5 @@
-const DEFAULT_BASE_BLOCKCHAIN_API = 'http://34.60.171.40:8080/api';
-const DEFAULT_BASE_POOL_API = 'http://35.193.77.25:8081/api';
+const DEFAULT_BASE_BLOCKCHAIN_API = 'http://localhost:8080/api';
+const DEFAULT_BASE_POOL_API = 'http://localhost:8081/api';
 
 // Config centralizada: se puede sobrescribir con window.BLOCKCHAIN_API_CONFIG antes de cargar main.js
 const config = window.BLOCKCHAIN_API_CONFIG || {};
